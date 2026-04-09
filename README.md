@@ -1,1 +1,1 @@
-# PNPFlow_admm
+The code base is an adaptation from the paper PnP-Flow: Plug-and-Play Image Restoration with Flow Matching by Martin et.al.
