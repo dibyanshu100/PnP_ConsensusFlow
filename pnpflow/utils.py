@@ -530,15 +530,15 @@ def save_images(clean_img, noisy_img, rec_img, args, H_adj, iter='final'):
                     plt.imshow(img[i])
                     plt.axis('off')
                     if k == 0 and args.method == 'pnp_flow':
-                        plt.savefig(os.path.join(args.save_path_ip, f"{args.problem}_{list_word[k]}_batch{args.batch}_im{i}.eps"),
+                        plt.savefig(os.path.join(args.save_path_ip, f"{args.problem}_{list_word[k]}_batch{args.batch}_im{i}.png"),
                                     bbox_inches='tight', pad_inches=0)
                     if k == 1 and args.method == 'pnp_flow':
-                        plt.savefig(os.path.join(args.save_path_ip, f"{args.problem}_{list_word[k]}_batch{args.batch}_im{i}_pnsr{psnr_noisy:4.2f}.eps"),
+                        plt.savefig(os.path.join(args.save_path_ip, f"{args.problem}_{list_word[k]}_batch{args.batch}_im{i}_pnsr{psnr_noisy:4.2f}.png"),
                                     bbox_inches='tight', pad_inches=0)
                     if k == 2:
                         print(os.path.join(
-                            args.save_path_ip, f"{args.problem}_{list_word[k]}_batch{args.batch}_im{i}_pnsr{psnr_rec:4.2f}.eps"))
-                        plt.savefig(os.path.join(args.save_path_ip, f"{args.problem}_{list_word[k]}_batch{args.batch}_im{i}_iter{iter}_pnsr{psnr_rec:4.2f}.eps"),
+                            args.save_path_ip, f"{args.problem}_{list_word[k]}_batch{args.batch}_im{i}_pnsr{psnr_rec:4.2f}.png"))
+                        plt.savefig(os.path.join(args.save_path_ip, f"{args.problem}_{list_word[k]}_batch{args.batch}_im{i}_iter{iter}_pnsr{psnr_rec:4.2f}.png"),
                                     bbox_inches='tight', pad_inches=0)
                     plt.close(fig)
 

@@ -7,7 +7,7 @@ import pnpflow.image_generation.models.utils as mutils
 import pnpflow.utils as utils
 
 
-class PNP_FLOW(object):
+class PNP_FLOW_ADMM(object):
 
     def __init__(self, model, device, args):
         self.device = device

@@ -7,7 +7,7 @@ import pnpflow.image_generation.models.utils as mutils
 import pnpflow.utils as utils
 
 
-class PNP_FLOW(object):
+class PNP_FLOW_FBS(object):
 
     def __init__(self, model, device, args):
         self.device = device
@@ -24,47 +24,38 @@ class PNP_FLOW(object):
             t_ = t[:, None, None, None]
             v = model_fn(x.type(torch.float), t * 999)
             return v
-        
-    # the data-consistency step may need different strength
+
     def learning_rate_strat(self, lr, t):
         t = t.view(-1, 1, 1, 1)
         gamma_styles = {
-            '1_minus_t': lambda lr, t: lr * (1 - t),                    # Step size decreases linearly as t increases
-            'sqrt_1_minus_t': lambda lr, t: lr * torch.sqrt(1 - t),     # smoother decay
-            'constant': lambda lr, t: lr,                               # constant
-            'alpha_1_minus_t': lambda lr, t: lr * (1 - t)**self.args.alpha,    # generalized polynomial decay controlled by alpha
+            '1_minus_t': lambda lr, t: lr * (1 - t),
+            'sqrt_1_minus_t': lambda lr, t: lr * torch.sqrt(1 - t),
+            'constant': lambda lr, t: lr,
+            'alpha_1_minus_t': lambda lr, t: lr * (1 - t)**self.args.alpha,
         }
         return gamma_styles.get(self.args.gamma_style, lambda lr, t: lr)(lr, t)
 
-    # computes the gradient of the data-fidelity term
     def grad_datafit(self, x, y, H, H_adj):
         if self.args.noise_type == 'gaussian':
-            return H_adj(H(x) - y) / (self.args.sigma_noise**2)          # Gaussian noise linear operator
+            return H_adj(H(x) - y) / (self.args.sigma_noise**2)
         elif self.args.noise_type == 'laplace':
             return H_adj(2*torch.heaviside(H(x)-y, torch.zeros_like(H(x)))-1)/self.args.sigma_noise
         else:
             raise ValueError('Noise type not supported')
 
-    # # The controversial interpolation step
-    # def interpolation_step(self, x, t):
-    #     return t * x + torch.randn_like(x) * (1 - t)
+    def interpolation_step(self, x, t):
+        return t * x + torch.randn_like(x) * (1 - t)
 
-    def interpolation_step(self, x, t, noise):
-        return t * x + noise*(1-t) 
-    
-    # The final Denoiser step
     def denoiser(self, x, t):
-        v = self.model_forward(x, t)                     # Run the model
-        return x + (1 - t.view(-1, 1, 1, 1)) * v         # Convert that into an image update
+        v = self.model_forward(x, t)
+        return x + (1 - t.view(-1, 1, 1, 1)) * v
 
-     # H: forward degradation operator (maps image to measurement space) 
-     # H_adj: adjoint operator (maps measurement to image space)
     def solve_ip(self, test_loader, degradation, sigma_noise, H_funcs=None):
-        H = degradation.H                          
+        H = degradation.H
         H_adj = degradation.H_adj
         self.args.sigma_noise = sigma_noise
         num_samples = self.args.num_samples
-        steps, delta = self.args.steps_pnp, 1 / self.args.steps_pnp     # steps_pnp: number of iterations in the PnP loop 
+        steps, delta = self.args.steps_pnp, 1 / self.args.steps_pnp
         if self.args.noise_type == 'gaussian':
             self.args.lr_pnp = sigma_noise**2 * self.args.lr_pnp
             lr = self.args.lr_pnp
@@ -76,6 +67,9 @@ class PNP_FLOW(object):
             raise ValueError('Noise type not supported')
 
         loader = iter(test_loader)
+        # skip first N batches
+        for _ in range(10):
+            next(loader)
         for batch in range(self.args.max_batch):
 
             (clean_img, labels) = next(loader)
@@ -85,7 +79,7 @@ class PNP_FLOW(object):
             if self.args.noise_type == 'gaussian':
                 noisy_img = H(clean_img.clone().to(self.device))
                 torch.manual_seed(batch)
-                noisy_img += torch.randn_like(noisy_img) * sigma_noise    # Create noisy measurement
+                noisy_img += torch.randn_like(noisy_img) * sigma_noise
             elif self.args.noise_type == 'laplace':
                 noisy_img = H(clean_img.clone().to(self.device))
                 noise = torch.distributions.laplace.Laplace(
@@ -98,10 +92,7 @@ class PNP_FLOW(object):
                 self.device), clean_img.to('cpu')
 
             # intialize the image with the adjoint operator
-            # x = H_adj(torch.ones_like(noisy_img)).to(self.device)     # They are not starting with random noise
-            # print("Starting with H-adj operator")
-            x = torch.randn(clean_img.shape, device=self.device)
-            gauss_noise = x.clone()
+            x = H_adj(torch.ones_like(noisy_img)).to(self.device)
 
             if self.args.compute_time:
                 torch.cuda.synchronize()
@@ -119,25 +110,17 @@ class PNP_FLOW(object):
                         len(x), device=self.device) * delta * iteration
                     lr_t = self.learning_rate_strat(lr, t1)
 
-                    z = x - lr_t * self.grad_datafit(x, noisy_img, H, H_adj)
+                    z = x - lr_t * \
+                        self.grad_datafit(x, noisy_img, H, H_adj)
 
-                    # x_new = torch.zeros_like(x)
-                    # for _ in range(num_samples):
-                    #     z_tilde = self.interpolation_step(
-                    #         z, t1.view(-1, 1, 1, 1))
-                    #     x_new += self.denoiser(z_tilde, t1)
+                    x_new = torch.zeros_like(x)
+                    for _ in range(num_samples):
+                        z_tilde = self.interpolation_step(
+                            z, t1.view(-1, 1, 1, 1))
+                        x_new += self.denoiser(z_tilde, t1)
 
-                    # x_new /= num_samples          # Averaging in the denoising step (could be a reason for over smoothed sample)
-                    # x = x_new
-
-                    z_tilde = self.interpolation_step(z, t1.view(-1, 1, 1, 1),gauss_noise)
-                    x = self.denoiser(z_tilde, t1)
-
-                    gauss_noise_1 = (z_tilde - x*t1.view(-1, 1, 1, 1))/ ((1-t1.view(-1, 1, 1, 1)) + 1e-12)
-                    gauss_noise_2 = torch.randn_like(x)
-                    w1 = t1.view(-1, 1, 1, 1)
-                    w2 = 1 - t1.view(-1, 1, 1, 1)
-                    gauss_noise = (w2 * gauss_noise_2 + w1 * gauss_noise_1) / torch.sqrt(w1**2 + w2**2 + 1e-12)
+                    x_new /= num_samples
+                    x = x_new
 
                     if self.args.compute_time:
                         torch.cuda.synchronize()

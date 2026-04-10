@@ -11,7 +11,8 @@ from pnpflow.dataloaders import DataLoaders
 from pnpflow.train_flow_matching import FLOW_MATCHING
 from pnpflow.train_denoiser import GRADIENT_STEP_DENOISER
 from pnpflow.compute_metric import ComputeMetric
-from pnpflow.methods.pnp_flow import PNP_FLOW
+from pnpflow.methods.pnp_flow_admm import PNP_FLOW_ADMM
+from pnpflow.methods.pnp_flow_fbs import PNP_FLOW_FBS
 from pnpflow.methods.d_flow import D_FLOW
 from pnpflow.methods.ot_ode import OT_ODE
 from pnpflow.methods.flow_priors import FLOW_PRIORS
@@ -193,9 +194,11 @@ def main():
             os.makedirs(args.save_path)
         except FileExistsError:
             pass
-
-        if args.method == 'pnp_flow':
-            method = PNP_FLOW(model, device, args)
+        
+        if args.method == 'pnp_flow_admm':
+            method = PNP_FLOW_ADMM(model, device, args)
+        if args.method == 'pnp_flow_fbs':
+            method = PNP_FLOW_FBS(model, device, args)
         elif args.method == 'd_flow':
             method = D_FLOW(model, device, args)
         elif args.method == 'ot_ode':
