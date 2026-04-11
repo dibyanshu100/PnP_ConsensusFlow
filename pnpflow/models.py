@@ -438,10 +438,82 @@ class UNet(nn.Module):
             x = m(x, temp)
         return x
 
-    # noinspection PyArgumentList,PyShadowingNames
+    # # noinspection PyArgumentList,PyShadowingNames
+    # def forward(self, x, temp):
+    #     # Init
+    #     B, C, H, W = x.size()
+
+    #     # Timestep embedding
+    #     temb = self.temb_net(temp)
+    #     assert list(temb.shape) == [B, self.ch * 4]
+
+    #     # Downsampling
+    #     hs = [self.begin_conv(x)]
+    #     for i_level in range(self.num_resolutions):
+    #         # Residual blocks for this resolution
+    #         block_modules = self.down_modules[i_level]
+    #         for i_block in range(self.num_res_blocks):
+    #             resnet_block = block_modules['{}a_{}a_block'.format(
+    #                 i_level, i_block)]
+    #             h = resnet_block(hs[-1], temb)
+    #             if h.size(2) in self.attn_resolutions:
+    #                 attn_block = block_modules['{}a_{}b_attn'.format(
+    #                     i_level, i_block)]
+    #                 h = attn_block(h, temb)
+    #             hs.append(h)
+    #         # Downsample
+    #         if i_level != self.num_resolutions - 1:
+    #             downsample = block_modules['{}b_downsample'.format(i_level)]
+    #             hs.append(downsample(hs[-1]))
+
+    #     # Middle
+    #     h = hs[-1]
+    #     h = self._compute_cond_module(self.mid_modules, h, temb)
+
+    #     # Upsampling
+    #     for i_idx, i_level in enumerate(reversed(range(self.num_resolutions))):
+    #         # Residual blocks for this resolution
+    #         block_modules = self.up_modules[i_idx]
+    #         for i_block in range(self.num_res_blocks + 1):
+    #             resnet_block = block_modules['{}a_{}a_block'.format(
+    #                 i_level, i_block)]
+    #             h = resnet_block(torch.cat([h, hs.pop()], axis=1), temb)
+    #             if h.size(2) in self.attn_resolutions:
+    #                 attn_block = block_modules['{}a_{}b_attn'.format(
+    #                     i_level, i_block)]
+    #                 h = attn_block(h, temb)
+    #         # Upsample
+    #         if i_level != 0:
+    #             upsample = block_modules['{}b_upsample'.format(i_level)]
+    #             h = upsample(h)
+    #     assert not hs
+
+    #     # End
+    #     h = self.end_conv(h)
+    #     assert list(h.size()) == [x.size(
+    #         0), self.output_channels, x.size(2), x.size(3)]
+    #     return h
+
     def forward(self, x, temp):
         # Init
         B, C, H, W = x.size()
+
+        # Make temp batch-shaped: [B]
+        if not torch.is_tensor(temp):
+            temp = torch.tensor(temp, device=x.device, dtype=x.dtype)
+        else:
+            temp = temp.to(device=x.device, dtype=x.dtype)
+
+        if temp.ndim == 0:
+            temp = temp.repeat(B)
+        else:
+            temp = temp.reshape(-1)
+            if temp.numel() == 1:
+                temp = temp.repeat(B)
+            elif temp.numel() != B:
+                raise ValueError(
+                    f"Expected temp to have {B} elements, got shape {temp.shape}"
+                )
 
         # Timestep embedding
         temb = self.temb_net(temp)
@@ -450,7 +522,6 @@ class UNet(nn.Module):
         # Downsampling
         hs = [self.begin_conv(x)]
         for i_level in range(self.num_resolutions):
-            # Residual blocks for this resolution
             block_modules = self.down_modules[i_level]
             for i_block in range(self.num_res_blocks):
                 resnet_block = block_modules['{}a_{}a_block'.format(
@@ -461,7 +532,6 @@ class UNet(nn.Module):
                         i_level, i_block)]
                     h = attn_block(h, temb)
                 hs.append(h)
-            # Downsample
             if i_level != self.num_resolutions - 1:
                 downsample = block_modules['{}b_downsample'.format(i_level)]
                 hs.append(downsample(hs[-1]))
@@ -472,7 +542,6 @@ class UNet(nn.Module):
 
         # Upsampling
         for i_idx, i_level in enumerate(reversed(range(self.num_resolutions))):
-            # Residual blocks for this resolution
             block_modules = self.up_modules[i_idx]
             for i_block in range(self.num_res_blocks + 1):
                 resnet_block = block_modules['{}a_{}a_block'.format(
@@ -482,10 +551,10 @@ class UNet(nn.Module):
                     attn_block = block_modules['{}a_{}b_attn'.format(
                         i_level, i_block)]
                     h = attn_block(h, temb)
-            # Upsample
             if i_level != 0:
                 upsample = block_modules['{}b_upsample'.format(i_level)]
                 h = upsample(h)
+
         assert not hs
 
         # End

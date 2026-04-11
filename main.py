@@ -23,8 +23,10 @@ import warnings
 warnings.filterwarnings("ignore", module="matplotlib\\..*")
 
 torch.cuda.empty_cache()
-os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+# os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["WORLD_SIZE"] = "0"
 
 
 def parse_args() -> argparse.Namespace:
