@@ -35,6 +35,9 @@ class FLOW_PRIORS(object):
         H_adj = degradation.H_adj
 
         loader = iter(test_loader)
+        # skip first N batches
+        for _ in range(self.args.start_batch):
+            next(loader)
         for batch in range(self.args.max_batch):
             (clean_img, labels) = next(loader)
             self.args.batch = batch

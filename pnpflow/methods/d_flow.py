@@ -72,6 +72,9 @@ class D_FLOW(object):
         self.args.sigma_noise = sigma_noise
 
         loader = iter(test_loader)
+        # skip first N batches
+        for _ in range(self.args.start_batch):
+            next(loader)
         for batch in range(self.args.max_batch):
             (clean_img, labels) = next(loader)
             self.args.batch = batch

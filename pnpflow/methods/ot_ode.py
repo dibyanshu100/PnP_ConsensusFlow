@@ -35,6 +35,8 @@ class OT_ODE(object):
         H_adj = degradation.H_adj
 
         loader = iter(test_loader)
+        for _ in range(self.args.start_batch):
+            next(loader)
         for batch in range(self.args.max_batch):
             (clean_img, labels) = next(loader)
             self.args.batch = batch

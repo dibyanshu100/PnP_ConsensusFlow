@@ -1,4 +1,6 @@
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["WORLD_SIZE"] = "1"
 import random
 import argparse
 import torch
@@ -25,8 +27,8 @@ warnings.filterwarnings("ignore", module="matplotlib\\..*")
 torch.cuda.empty_cache()
 # os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
 # os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-os.environ["WORLD_SIZE"] = "0"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# os.environ["WORLD_SIZE"] = "1"
 
 
 def parse_args() -> argparse.Namespace:
@@ -124,7 +126,7 @@ def main():
             if args.noise_type == 'laplace':
                 sigma_noise = 0.3
             elif args.noise_type == 'gaussian':
-                sigma_noise = 0.2
+                sigma_noise = 0.3
             degradation = Denoising()
 
         elif args.problem == "inpainting":
@@ -199,7 +201,7 @@ def main():
         
         if args.method == 'pnp_flow_admm':
             method = PNP_FLOW_ADMM(model, device, args)
-        if args.method == 'pnp_flow_fbs':
+        elif args.method == 'pnp_flow_fbs':
             method = PNP_FLOW_FBS(model, device, args)
         elif args.method == 'd_flow':
             method = D_FLOW(model, device, args)
@@ -216,6 +218,6 @@ def main():
 
         method.run_method(data_loaders, degradation, sigma_noise)
 
-# python main.py --opts dataset afhq_cat train False eval True problem denoising  method pnp_flow
+# python main.py --opts dataset afhq_cat train False eval True problem denoising start_batch 4 method pnp_flow_admm
 if __name__ == "__main__":
     main()

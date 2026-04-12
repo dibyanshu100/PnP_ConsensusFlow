@@ -3,5 +3,5 @@ METHOD:
     lmbda: 0.01
     alpha: 0.1
     max_iter: 10
-    LBFGS_iter: 10
+    LBFGS_iter: 5
     start_time: 0.0

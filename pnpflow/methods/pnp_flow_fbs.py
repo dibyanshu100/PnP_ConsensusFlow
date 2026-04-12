@@ -43,8 +43,8 @@ class PNP_FLOW_FBS(object):
         else:
             raise ValueError('Noise type not supported')
 
-    def interpolation_step(self, x, t):
-        return t * x + torch.randn_like(x) * (1 - t)
+    def interpolation_step(self, x, t, noise):
+        return t * x + noise * (1 - t)
 
     def denoiser(self, x, t):
         v = self.model_forward(x, t)
@@ -68,7 +68,7 @@ class PNP_FLOW_FBS(object):
 
         loader = iter(test_loader)
         # skip first N batches
-        for _ in range(10):
+        for _ in range(self.args.start_batch):
             next(loader)
         for batch in range(self.args.max_batch):
 
@@ -93,6 +93,7 @@ class PNP_FLOW_FBS(object):
 
             # intialize the image with the adjoint operator
             x = H_adj(torch.ones_like(noisy_img)).to(self.device)
+            gauss_noise = torch.randn_like(x)
 
             if self.args.compute_time:
                 torch.cuda.synchronize()
@@ -113,14 +114,25 @@ class PNP_FLOW_FBS(object):
                     z = x - lr_t * \
                         self.grad_datafit(x, noisy_img, H, H_adj)
 
-                    x_new = torch.zeros_like(x)
-                    for _ in range(num_samples):
-                        z_tilde = self.interpolation_step(
-                            z, t1.view(-1, 1, 1, 1))
-                        x_new += self.denoiser(z_tilde, t1)
+                    if self.args.random_noise:
+                        x_new = torch.zeros_like(x)
+                        for _ in range(num_samples):
+                            gauss_noise =  torch.randn_like(x_new)
+                            z_tilde = self.interpolation_step(
+                                z, t1.view(-1, 1, 1, 1),gauss_noise)
+                            x_new += self.denoiser(z_tilde, t1)
+                    
+                        x_new /= num_samples
+                        x = x_new
+                    else:
+                        z_tilde = self.interpolation_step(z, t1.view(-1, 1, 1, 1),gauss_noise)
+                        x = self.denoiser(z_tilde, t1)
+                        gauss_noise_1 = (z_tilde - x*t1.view(-1, 1, 1, 1))/ ((1-t1.view(-1, 1, 1, 1)) + 1e-12)
+                        gauss_noise_2 = torch.randn_like(x)
+                        w1 = t1.view(-1, 1, 1, 1)
+                        w2 = 1 - t1.view(-1, 1, 1, 1)
+                        gauss_noise = (w2 * gauss_noise_2 + w1 * gauss_noise_1) / torch.sqrt(w1**2 + w2**2 + 1e-12)
 
-                    x_new /= num_samples
-                    x = x_new
 
                     if self.args.compute_time:
                         torch.cuda.synchronize()

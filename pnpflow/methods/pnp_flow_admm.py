@@ -1,10 +1,10 @@
 import torch
-import torch
 import numpy as np
 import os
 from time import perf_counter
 import pnpflow.image_generation.models.utils as mutils
 import pnpflow.utils as utils
+import matplotlib.pyplot as plt
 
 
 class PNP_FLOW_ADMM(object):
@@ -55,7 +55,6 @@ class PNP_FLOW_ADMM(object):
 
         elif self.args.model == "rectified":
             model_fn = mutils.get_model_fn(self.model, train=False)
-            t_ = t[:, None, None, None]
             v = model_fn(x.type(torch.float), t * 999)
             return v
 
@@ -68,6 +67,28 @@ class PNP_FLOW_ADMM(object):
     def denoiser(self, x, t):
         v = self.model_forward(x, t)                     # Run the model
         return x + (1 - t.view(-1, 1, 1, 1)) * v         # Convert that into an image update
+    
+
+    def save_norms(self, u_norm_list, res_norm_list, batch):
+        norms_dir = os.path.join(self.args.save_path_ip, "norms")
+        os.makedirs(norms_dir, exist_ok=True)
+        u_norm_array = np.array(u_norm_list, dtype=np.float32)
+        res_norm_array = np.array(res_norm_list, dtype=np.float32)
+        np.savez(
+            os.path.join(norms_dir, f"norms_batch_{batch}.npz"),
+            u_norm=u_norm_array,
+            res_norm=res_norm_array
+        )
+        plt.figure()
+        plt.plot(u_norm_array, label="||u||")
+        plt.plot(res_norm_array, label="||x - v||")
+        plt.xlabel("Iteration")
+        plt.ylabel("Norm value")
+        plt.title(f"ADMM Norms (Batch {batch})")
+        plt.legend()
+        plt.grid()
+        plt.savefig(os.path.join(norms_dir, f"norms_batch_{batch}.png"))
+        plt.close()
 
 
      # H: forward degradation operator (maps image to measurement space) 
@@ -87,6 +108,9 @@ class PNP_FLOW_ADMM(object):
         cg_tol = float(self.args.cg_tol)
 
         loader = iter(test_loader)
+        # skip first N batches
+        for _ in range(self.args.start_batch):
+            next(loader)
         for batch in range(self.args.max_batch):
 
             (clean_img, labels) = next(loader)
@@ -109,6 +133,11 @@ class PNP_FLOW_ADMM(object):
             u = torch.zeros_like(x)
             gauss_noise = x.clone()
             # gauss_noise = torch.randn(clean_img.shape, device=self.device)
+
+            # Optional norm tracking
+            if self.args.save_norms_admm:
+                u_norm_list = []
+                res_norm_list = []
 
             if self.args.compute_time:
                 torch.cuda.synchronize()
@@ -149,16 +178,22 @@ class PNP_FLOW_ADMM(object):
                     gauss_noise_2 = torch.randn_like(x)
                     w1 = t_view
                     w2 = 1 - t_view
-                    gauss_noise = (w2 * gauss_noise_2 + w1 * gauss_noise_1) / torch.sqrt(w1**2 + w2**2 + 1e-12) #torch.randn_like(x) * (1 - t_view)
+
+                    if self.args.adaptive_noise:
+                        gauss_noise = (w2 * gauss_noise_2 + w1 * gauss_noise_1) / torch.sqrt(w1**2 + w2**2 + 1e-12) 
+                    else:
+                        gauss_noise = torch.randn_like(x) * (1 - t_view)
                                         
                     # u-update: dual variable
                     u = u + (x-v) #u + (x - v) 
                     
-                    u_norm = torch.norm(u)
-                    x_norm = torch.norm(x)
-                    rel_u = u_norm / (x_norm + 1e-12)
-
-                    print(f"Iter {iteration}: ||u||={u_norm.item():.4f}, ||x||={x_norm.item():.4f}, ||u||/||x||={rel_u.item():.6f}")
+                    # Store norms
+                    if self.args.save_norms_admm:
+                        u_norm = torch.norm(u)
+                        res_norm = torch.norm(x - v)
+                        u_norm_list.append(u_norm.item())
+                        res_norm_list.append(res_norm.item())
+                        print(f"Iter {iteration}: ||u||={u_norm.item():.4f}, ||x-v||={res_norm.item():.4f}")
 
                     if self.args.compute_time:
                         torch.cuda.synchronize()
@@ -178,6 +213,9 @@ class PNP_FLOW_ADMM(object):
                             utils.compute_lpips(
                                 clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration
                             )
+
+            if  self.args.save_norms_admm:
+                self.save_norms(u_norm_list, res_norm_list, batch)
 
             if self.args.compute_memory:
                 dict_memory = {}
