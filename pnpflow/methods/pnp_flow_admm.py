@@ -21,11 +21,11 @@ class PNP_FLOW_ADMM(object):
         d = r
         eps = 1e-12
         for _ in range(max_iter):
-            z = A(d)
+            l = A(d)
             rr = torch.sum(r**2)
-            alpha = rr/(torch.sum(d*z) +eps)
+            alpha = rr/(torch.sum(d*l) +eps)
             x += alpha*d
-            r -= alpha*z
+            r -= alpha*l
             if torch.norm(r)/(torch.norm(b)+eps) < tol:
                 break
             beta = torch.sum(r**2)/(rr+eps)
@@ -33,10 +33,10 @@ class PNP_FLOW_ADMM(object):
         return x
     
     
-    def admm_x_update(self, x_init, v, u, y, H, H_adj, rho, sigma_noise, max_cgiter=50, cg_tol=1e-6):
+    def admm_x_update(self, x_init, z, u, y, H, H_adj, rho, sigma_noise, max_cgiter=50, cg_tol=1e-6):
         """
         Solve:
-            (1/sigma^2 H^T H + rho I)x = 1/sigma^2 H^T y + rho (v-u)
+            (1/sigma^2 H^T H + rho I)x = 1/sigma^2 H^T y + rho (z-u)
         using conjugate gradient
         """
         sigma2_inv = 1.0 / (sigma_noise ** 2)
@@ -44,7 +44,7 @@ class PNP_FLOW_ADMM(object):
         def A(x):
             return sigma2_inv * H_adj(H(x)) + rho * x
 
-        b = sigma2_inv * H_adj(y) + rho * (v - u)
+        b = sigma2_inv * H_adj(y) + rho * (z - u)
 
         x = self.conjugate_gradient(A, b, x_init, max_iter=max_cgiter, tol=cg_tol)
         return x
@@ -55,8 +55,8 @@ class PNP_FLOW_ADMM(object):
 
         elif self.args.model == "rectified":
             model_fn = mutils.get_model_fn(self.model, train=False)
-            v = model_fn(x.type(torch.float), t * 999)
-            return v
+            z = model_fn(x.type(torch.float), t * 999)
+            return z
 
     # interpolation step
     def interpolation_step(self, x, t, noise):
@@ -65,8 +65,8 @@ class PNP_FLOW_ADMM(object):
     
     # The final Denoiser step
     def denoiser(self, x, t):
-        v = self.model_forward(x, t)                     # Run the model
-        return x + (1 - t.view(-1, 1, 1, 1)) * v         # Convert that into an image update
+        z = self.model_forward(x, t)                     # Run the model
+        return x + (1 - t.view(-1, 1, 1, 1)) * z         # Convert that into an image update
     
 
     def save_norms(self, u_norm_list, res_norm_list, batch):
@@ -81,7 +81,7 @@ class PNP_FLOW_ADMM(object):
         )
         plt.figure()
         plt.plot(u_norm_array, label="||u||")
-        plt.plot(res_norm_array, label="||x - v||")
+        plt.plot(res_norm_array, label="||x - z||")
         plt.xlabel("Iteration")
         plt.ylabel("Norm value")
         plt.title(f"ADMM Norms (Batch {batch})")
@@ -129,7 +129,7 @@ class PNP_FLOW_ADMM(object):
             # ADMM initialization: better than random init for inverse problems
             # x = H_adj(noisy_img).to(self.device)
             x = torch.randn(clean_img.shape, device=self.device)
-            v = x.clone()
+            z = x.clone()
             u = torch.zeros_like(x)
             gauss_noise = x.clone()
             # gauss_noise = torch.randn(clean_img.shape, device=self.device)
@@ -147,7 +147,7 @@ class PNP_FLOW_ADMM(object):
                 torch.cuda.reset_max_memory_allocated(self.device)
             
             # t1 = torch.zeros(len(x), device=self.device)    
-            # v = self.denoiser(v, t1)
+            # z = self.denoiser(z, t1)
             with torch.no_grad():
                 for iteration in range(int(steps)):
                     if self.args.compute_time:
@@ -159,7 +159,7 @@ class PNP_FLOW_ADMM(object):
                     # x-update: data-consistency proximal step
                     x = self.admm_x_update(
                         x_init=x,
-                        v=v,
+                        z=z,
                         u=u,
                         y=noisy_img,
                         H=H,
@@ -170,11 +170,11 @@ class PNP_FLOW_ADMM(object):
                         cg_tol=cg_tol
                     )
 
-                    # v-update: flow prior / denoiser step
-                    v_input = x + u
-                    v_tilde = self.interpolation_step(v_input, t_view, gauss_noise)
-                    v = self.denoiser(v_tilde, t1)
-                    gauss_noise_1 = (v_tilde - v*t_view)/ ((1-t_view) + 1e-12)
+                    # z-update: flow prior / denoiser step
+                    z_input = x + u
+                    z_tilde = self.interpolation_step(z_input, t_view, gauss_noise)
+                    z = self.denoiser(z_tilde, t1)
+                    gauss_noise_1 = (z_tilde - z*t_view)/ ((1-t_view) + 1e-12)
                     gauss_noise_2 = torch.randn_like(x)
                     w1 = t_view
                     w2 = 1 - t_view
@@ -185,15 +185,15 @@ class PNP_FLOW_ADMM(object):
                         gauss_noise = torch.randn_like(x) * (1 - t_view)
                                         
                     # u-update: dual variable
-                    u = u + (x-v) #u + (x - v) 
+                    u = u + (x-z) #u + (x - z) 
                     
                     # Store norms
                     if self.args.save_norms_admm:
                         u_norm = torch.norm(u)
-                        res_norm = torch.norm(x - v)
+                        res_norm = torch.norm(x - z)
                         u_norm_list.append(u_norm.item())
                         res_norm_list.append(res_norm.item())
-                        print(f"Iter {iteration}: ||u||={u_norm.item():.4f}, ||x-v||={res_norm.item():.4f}")
+                        print(f"Iter {iteration}: ||u||={u_norm.item():.4f}, ||x-z||={res_norm.item():.4f}")
 
                     if self.args.compute_time:
                         torch.cuda.synchronize()
@@ -202,7 +202,7 @@ class PNP_FLOW_ADMM(object):
 
                     if self.args.save_results:
                         if iteration % 50 == 0 or self.should_save_image(iteration, steps):
-                            restored_img = v.detach().clone()
+                            restored_img = z.detach().clone()
                             # utils.save_images(clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration)
                             utils.compute_psnr(
                                 clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration
@@ -230,7 +230,7 @@ class PNP_FLOW_ADMM(object):
                 utils.save_time_use(dict_time, self.args)
 
             if self.args.save_results:
-                restored_img = v.detach().clone()
+                restored_img = z.detach().clone()
                 utils.save_images(
                     clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter='final'
                 )

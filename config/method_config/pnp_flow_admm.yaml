@@ -1,13 +1,8 @@
 METHOD:
-    steps_pnp: 300
-    lr_pnp: 1.0
-    gamma_style: 'alpha_1_minus_t'
-    num_samples: 5
-    alpha: 1.0
-    rho_admm: 500   #0.05
-    max_cgiter: 10    #30
+    steps_pnp: 150
+    rho_admm: 1000   
+    max_cgiter: 10    
     cg_tol: 1e-5
-    flow_step: 0.02
     save_norms_admm: False
     adaptive_noise: True
     
