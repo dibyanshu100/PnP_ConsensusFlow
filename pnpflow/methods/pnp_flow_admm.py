@@ -69,24 +69,31 @@ class PNP_FLOW_ADMM(object):
         return x + (1 - t.view(-1, 1, 1, 1)) * z         # Convert that into an image update
     
 
-    def save_norms(self, u_norm_list, res_norm_list, batch):
+    def save_norms(self, primal_res_list, dual_res_list, u_inc_list, batch):
         norms_dir = os.path.join(self.args.save_path_ip, "norms")
         os.makedirs(norms_dir, exist_ok=True)
-        u_norm_array = np.array(u_norm_list, dtype=np.float32)
-        res_norm_array = np.array(res_norm_list, dtype=np.float32)
+
+        primal_res_array = np.array(primal_res_list, dtype=np.float32)
+        dual_res_array = np.array(dual_res_list, dtype=np.float32)
+        u_inc_array = np.array(u_inc_list, dtype=np.float32)
+
         np.savez(
             os.path.join(norms_dir, f"norms_batch_{batch}.npz"),
-            u_norm=u_norm_array,
-            res_norm=res_norm_array
+            primal_res=primal_res_array,
+            dual_res=dual_res_array,
+            u_inc=u_inc_array
         )
+
         plt.figure()
-        plt.plot(u_norm_array, label="||u||")
-        plt.plot(res_norm_array, label="||x - z||")
+        plt.plot(primal_res_array, label=r"$\|x^k - z^k\|_2$")
+        plt.plot(dual_res_array, label=r"$\rho\|z^k - z^{k-1}\|_2$")
+        plt.plot(u_inc_array, label=r"$\|u^{k+1} - u^k\|_2$")
         plt.xlabel("Iteration")
         plt.ylabel("Norm value")
-        plt.title(f"ADMM Norms (Batch {batch})")
+        plt.title(f"ADMM Convergence Diagnostics (Batch {batch})")
+        plt.yscale("log")  # matches your writeup
         plt.legend()
-        plt.grid()
+        plt.grid(True)
         plt.savefig(os.path.join(norms_dir, f"norms_batch_{batch}.png"))
         plt.close()
 
@@ -138,6 +145,7 @@ class PNP_FLOW_ADMM(object):
             if self.args.save_norms_admm:
                 u_norm_list = []
                 res_norm_list = []
+                dual_res_list = []
 
             if self.args.compute_time:
                 torch.cuda.synchronize()
@@ -155,6 +163,10 @@ class PNP_FLOW_ADMM(object):
 
                     t1 = torch.ones(len(x), device=self.device) * (delta * iteration)
                     t_view = t1.view(-1, 1, 1, 1)
+
+                    # Save previous values for diagnostics
+                    z_prev = z.clone()
+                    u_prev = u.clone()
 
                     # x-update: data-consistency proximal step
                     x = self.admm_x_update(
@@ -188,12 +200,22 @@ class PNP_FLOW_ADMM(object):
                     u = u + (x-z) #u + (x - z) 
                     
                     # Store norms
+                    # if self.args.save_norms_admm:
+                    #     u_norm = torch.norm(u)
+                    #     res_norm = torch.norm(x - z)
+                    #     u_norm_list.append(u_norm.item())
+                    #     res_norm_list.append(res_norm.item())
+                    #     print(f"Iter {iteration}: ||u||={u_norm.item():.4f}, ||x-z||={res_norm.item():.4f}")
+
+                    # Store norms
                     if self.args.save_norms_admm:
-                        u_norm = torch.norm(u)
-                        res_norm = torch.norm(x - z)
-                        u_norm_list.append(u_norm.item())
-                        res_norm_list.append(res_norm.item())
-                        print(f"Iter {iteration}: ||u||={u_norm.item():.4f}, ||x-z||={res_norm.item():.4f}")
+                        primal_res = torch.norm(x - z)
+                        dual_res = rho * torch.norm(z - z_prev)
+                        u_inc = torch.norm(u - u_prev)
+                        res_norm_list.append(primal_res.item())
+                        dual_res_list.append(dual_res.item())
+                        u_norm_list.append(u_inc.item())
+                        print(f"Iter {iteration}: ||x-z||={primal_res.item():.4f}, rho||z-z_precv|| = {dual_res.item():.4f}), ||u-u_prev|| = {u_inc.item():.4f}")
 
                     if self.args.compute_time:
                         torch.cuda.synchronize()
@@ -215,7 +237,7 @@ class PNP_FLOW_ADMM(object):
                             )
 
             if  self.args.save_norms_admm:
-                self.save_norms(u_norm_list, res_norm_list, batch)
+                self.save_norms(res_norm_list, dual_res_list, u_norm_list, batch)
 
             if self.args.compute_memory:
                 dict_memory = {}

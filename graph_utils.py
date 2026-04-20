@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 import re
+import numpy as np
 
 
 def read_metric_file(file_path, y_col):
@@ -272,3 +273,225 @@ def extract_basic_metrics(root_dir: Path, out_xlsx: str = "metrics_summary.xlsx"
         result.to_excel(out_xlsx, index=False)
 
     return result
+
+
+def collect_norms_across_methods(root_dir: Path, batch: int = 0):
+    TASK_NAME_MAP = {
+    "denoising": "denoising",
+    "gaussian_deblurring_FFT": "deblurring",
+    "inpainting": "box_inpainting",
+    "paintbrush_inpainting": "paintbrush_inpainting",
+    "random_inpainting": "random_inpainting",
+    "superresolution": "superresolution",
+    }
+    norm_file_name = f"norms_batch_{batch}.npz"
+    norm_files = list(root_dir.rglob(norm_file_name))
+
+    if not norm_files:
+        print(f"[WARNING] No {norm_file_name} files found under {root_dir}")
+        return {"primal_res": {}, "dual_res": {}, "u_inc": {}}
+
+    collected = {
+        "primal_res": {},
+        "dual_res": {},
+        "u_inc": {},
+    }
+
+    for file_path in norm_files:
+        rel_parts = file_path.relative_to(root_dir).parts
+
+        # expected structure like:
+        # task / method / ... / norms / norms_batch_0.npz
+        if len(rel_parts) < 2:
+            print(f"[WARNING] Could not parse task/method from {file_path}")
+            continue
+
+        task = rel_parts[0]
+        method_label = TASK_NAME_MAP.get(task, task)
+
+        try:
+            data = np.load(file_path)
+        except Exception as e:
+            print(f"[WARNING] Could not load {file_path}: {e}")
+            continue
+
+        required_keys = ["primal_res", "dual_res", "u_inc"]
+        missing = [k for k in required_keys if k not in data]
+        if missing:
+            print(f"[WARNING] Missing keys {missing} in {file_path}")
+            continue
+
+        collected["primal_res"][method_label] = data["primal_res"]
+        collected["dual_res"][method_label] = data["dual_res"]
+        collected["u_inc"][method_label] = data["u_inc"]
+
+    return collected
+
+
+def plot_norm_comparison(
+    norms_dict,
+    norm_key: str,
+    title: str,
+    ylabel: str,
+    save_path: Path = None,
+    logy: bool = True,
+    figsize=(7, 5),
+):
+    """
+    Plot one norm across all methods.
+    """
+    if norm_key not in norms_dict:
+        print(f"[WARNING] {norm_key} not found in norms_dict")
+        return
+
+    curves = norms_dict[norm_key]
+    if not curves:
+        print(f"[WARNING] No curves found for {norm_key}")
+        return
+
+    plt.figure(figsize=figsize)
+
+    for method_name, values in sorted(curves.items()):
+        plt.plot(values, linewidth=2, label=method_name)
+
+    plt.xlabel("Iteration")
+    plt.ylabel(ylabel)
+    plt.title(title)
+    if logy:
+        plt.yscale("log")
+    plt.grid(True, alpha=0.3)
+    plt.legend(fontsize=8)
+    plt.tight_layout()
+
+    if save_path is not None:
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_path, dpi=300)
+        print(f"Saved: {save_path}")
+
+    plt.show()
+
+
+def plot_all_norms_across_methods(
+    root_dir: Path,
+    batch: int = 0,
+    save_dir: Path = None,
+    logy: bool = True,
+    dataset_name: str = None
+):
+    norms_dict = collect_norms_across_methods(root_dir=root_dir, batch=batch)
+
+    if save_dir is not None:
+        save_dir = Path(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+    plot_norm_comparison(
+        norms_dict=norms_dict,
+        norm_key="primal_res",
+        title=f"Primal Residual Across Methods for {dataset_name}",
+        ylabel=r"$\|x^k - z^k\|_2$",
+        save_path=None if save_dir is None else save_dir / f"primal_res_batch_{batch}.png",
+        logy=logy,
+    )
+
+    plot_norm_comparison(
+        norms_dict=norms_dict,
+        norm_key="dual_res",
+        title=f"Dual Residual Across Methods for {dataset_name}",
+        ylabel=r"$\rho\|z^k - z^{k-1}\|_2$",
+        save_path=None if save_dir is None else save_dir / f"dual_res_batch_{batch}.png",
+        logy=logy,
+    )
+
+    plot_norm_comparison(
+        norms_dict=norms_dict,
+        norm_key="u_inc",
+        title=f"Dual Variable Increment Across Methods for {dataset_name}",
+        ylabel=r"$\|u^{k+1} - u^k\|_2$",
+        save_path=None if save_dir is None else save_dir / f"u_inc_batch_{batch}.png",
+        logy=logy,
+    )
+
+
+#############################################################################################################################
+# time and memory
+
+def read_average_value(file_path: Path):
+    if not file_path.exists():
+        return None
+
+    try:
+        text = file_path.read_text().strip()
+    except Exception as e:
+        print(f"Could not read {file_path}: {e}")
+        return None
+
+    if not text:
+        return None
+
+    match = re.search(r":\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)", text)
+    if match:
+        return float(match.group(1))
+
+    return None
+
+
+def extract_time_memory_summary(root_dir: Path) -> pd.DataFrame:
+    """
+    Extract:
+      - time from time_average.txt
+      - memory from max_memory_average.txt
+
+    Expected folder structure:
+      root_dir / task / method / model / ... / time_average.txt
+    """
+    rows = []
+
+    for time_file in root_dir.rglob("time_average.txt"):
+        exp_dir = time_file.parent
+        mem_file = exp_dir / "max_memory_average.txt"
+
+        rel_parts = time_file.relative_to(root_dir).parts
+        if len(rel_parts) < 3:
+            continue
+
+        task = rel_parts[0]
+        method = rel_parts[1]
+        model = rel_parts[2]
+
+        time_avg = read_average_value(time_file)
+        max_memory_avg = read_average_value(mem_file)
+        if max_memory_avg is not None:
+            max_memory_avg = max_memory_avg / (1024 ** 3)
+
+        rows.append({
+            "task": task,
+            "method": method,
+            "model": model,
+            "time_average": time_avg,
+            "max_memory_average_gb": max_memory_avg,
+            "experiment_dir": str(exp_dir),
+        })
+
+    df = pd.DataFrame(rows)
+
+    if not df.empty:
+        df = df.sort_values(["task", "method", "model"]).reset_index(drop=True)
+
+    return df
+
+
+def save_time_memory_summary(df: pd.DataFrame, xlsx_path: str, csv_path: str = None):
+    if csv_path is not None:
+        df.to_csv(csv_path, index=False)
+
+    with pd.ExcelWriter(xlsx_path, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="all_results", index=False)
+
+        if "task" in df.columns:
+            for task_name, subdf in df.groupby("task"):
+                subdf.to_excel(writer, sheet_name=f"task_{task_name}"[:31], index=False)
+
+        if "method" in df.columns:
+            for method_name, subdf in df.groupby("method"):
+                subdf.to_excel(writer, sheet_name=f"method_{method_name}"[:31], index=False)
