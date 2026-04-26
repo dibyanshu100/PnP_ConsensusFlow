@@ -1,5 +1,5 @@
 METHOD:
-    steps_euler: 5
+    steps_euler: 4
     lmbda: 0.01
     alpha: 0.1
     max_iter: 10

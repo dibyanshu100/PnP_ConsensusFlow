@@ -58,12 +58,12 @@ class PNP_FLOW_ADMM(object):
             z = model_fn(x.type(torch.float), t * 999)
             return z
 
-    # interpolation step
-    def interpolation_step(self, x, t, noise):
-        return t * x + noise*(1-t)  #torch.randn_like(x) * (1 - t)
+    # projection step
+    def projection_step(self, x, t, noise):
+        return t * x + noise*(1-t)  
         
     
-    # The final Denoiser step
+    # Denoiser step
     def denoiser(self, x, t):
         z = self.model_forward(x, t)                     # Run the model
         return x + (1 - t.view(-1, 1, 1, 1)) * z         # Convert that into an image update
@@ -98,8 +98,6 @@ class PNP_FLOW_ADMM(object):
         plt.close()
 
 
-     # H: forward degradation operator (maps image to measurement space) 
-     # H_adj: adjoint operator (maps measurement to image space)
     def solve_ip(self, test_loader, degradation, sigma_noise, H_funcs=None):
         H = degradation.H
         H_adj = degradation.H_adj
@@ -133,13 +131,11 @@ class PNP_FLOW_ADMM(object):
             # Keep clean_img on CPU for metrics if your utils expect that
             noisy_img, clean_img_cpu = noisy_img.to(self.device), clean_img.to('cpu')
 
-            # ADMM initialization: better than random init for inverse problems
-            # x = H_adj(noisy_img).to(self.device)
+            # ADMM initialization
             x = torch.randn(clean_img.shape, device=self.device)
             z = x.clone()
             u = torch.zeros_like(x)
             gauss_noise = x.clone()
-            # gauss_noise = torch.randn(clean_img.shape, device=self.device)
 
             # Optional norm tracking
             if self.args.save_norms_admm:
@@ -154,8 +150,6 @@ class PNP_FLOW_ADMM(object):
             if self.args.compute_memory:
                 torch.cuda.reset_max_memory_allocated(self.device)
             
-            # t1 = torch.zeros(len(x), device=self.device)    
-            # z = self.denoiser(z, t1)
             with torch.no_grad():
                 for iteration in range(int(steps)):
                     if self.args.compute_time:
@@ -168,7 +162,7 @@ class PNP_FLOW_ADMM(object):
                     z_prev = z.clone()
                     u_prev = u.clone()
 
-                    # x-update: data-consistency proximal step
+                    # x-update: data-consistency step
                     x = self.admm_x_update(
                         x_init=x,
                         z=z,
@@ -184,7 +178,7 @@ class PNP_FLOW_ADMM(object):
 
                     # z-update: flow prior / denoiser step
                     z_input = x + u
-                    z_tilde = self.interpolation_step(z_input, t_view, gauss_noise)
+                    z_tilde = self.projection_step(z_input, t_view, gauss_noise)
                     z = self.denoiser(z_tilde, t1)
                     gauss_noise_1 = (z_tilde - z*t_view)/ ((1-t_view) + 1e-12)
                     gauss_noise_2 = torch.randn_like(x)
@@ -192,21 +186,19 @@ class PNP_FLOW_ADMM(object):
                     w2 = 1 - t_view
 
                     if self.args.adaptive_noise:
+                        # print("PnP-ADMM with adaptive projection")
                         gauss_noise = (w2 * gauss_noise_2 + w1 * gauss_noise_1) / torch.sqrt(w1**2 + w2**2 + 1e-12) 
                     else:
-                        gauss_noise = torch.randn_like(x) * (1 - t_view)
+                        if self.args.deterministic_noise:
+                            # print("PnP-ADMM with deterministic projection")
+                            gauss_noise = gauss_noise_1
+                        else:
+                            # print("PnP-ADMM with stochastic projection")
+                            gauss_noise = gauss_noise_2
                                         
                     # u-update: dual variable
-                    u = u + (x-z) #u + (x - z) 
+                    u = u + (x-z) 
                     
-                    # Store norms
-                    # if self.args.save_norms_admm:
-                    #     u_norm = torch.norm(u)
-                    #     res_norm = torch.norm(x - z)
-                    #     u_norm_list.append(u_norm.item())
-                    #     res_norm_list.append(res_norm.item())
-                    #     print(f"Iter {iteration}: ||u||={u_norm.item():.4f}, ||x-z||={res_norm.item():.4f}")
-
                     # Store norms
                     if self.args.save_norms_admm:
                         primal_res = torch.norm(x - z)
@@ -225,7 +217,6 @@ class PNP_FLOW_ADMM(object):
                     if self.args.save_results:
                         if iteration % 50 == 0 or self.should_save_image(iteration, steps):
                             restored_img = z.detach().clone()
-                            # utils.save_images(clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration)
                             utils.compute_psnr(
                                 clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration
                             )

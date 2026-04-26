@@ -114,7 +114,8 @@ class PNP_FLOW_FBS(object):
                     z = x - lr_t * \
                         self.grad_datafit(x, noisy_img, H, H_adj)
 
-                    if self.args.random_noise:
+                    if not self.args.adaptive_noise:
+                        # print("PnP-FBS with stochastic projection (original approach)")
                         x_new = torch.zeros_like(x)
                         for _ in range(num_samples):
                             gauss_noise =  torch.randn_like(x_new)
@@ -125,6 +126,7 @@ class PNP_FLOW_FBS(object):
                         x_new /= num_samples
                         x = x_new
                     else:
+                        # print("PNP-FBS with adaptive projection (our projection mechanism)")
                         z_tilde = self.interpolation_step(z, t1.view(-1, 1, 1, 1),gauss_noise)
                         x = self.denoiser(z_tilde, t1)
                         gauss_noise_1 = (z_tilde - x*t1.view(-1, 1, 1, 1))/ ((1-t1.view(-1, 1, 1, 1)) + 1e-12)

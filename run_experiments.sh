@@ -231,19 +231,19 @@ RANDOM=42
 
 # echo "FBS"
 
-# python main.py --opts dataset afhq_cat train False eval True problem inpainting start_batch 30 max_batch 10 batch_size_ip 4 method pnp_flow_fbs random_noise False
-# python main.py --opts dataset afhq_cat train False eval True problem random_inpainting start_batch 35 max_batch 10 batch_size_ip 4 method pnp_flow_fbs random_noise False
-# python main.py --opts dataset afhq_cat train False eval True problem denoising start_batch 40 max_batch 10 batch_size_ip 4 method pnp_flow_fbs random_noise False
-# python main.py --opts dataset afhq_cat train False eval True problem paintbrush_inpainting start_batch 45 max_batch 10 batch_size_ip 4 method pnp_flow_fbs random_noise False
-# python main.py --opts dataset afhq_cat train False eval True problem superresolution start_batch 50 max_batch 10 batch_size_ip 4 method pnp_flow_fbs random_noise False
-# python main.py --opts dataset afhq_cat train False eval True problem gaussian_deblurring_FFT start_batch 55 max_batch 10 batch_size_ip 4 method pnp_flow_fbs random_noise False
+# python main.py --opts dataset afhq_cat train False eval True problem inpainting start_batch 30 max_batch 10 batch_size_ip 4 method pnp_flow_fbs adaptive_noise False
+# python main.py --opts dataset afhq_cat train False eval True problem random_inpainting start_batch 35 max_batch 10 batch_size_ip 4 method pnp_flow_fbs adaptive_noise False
+# python main.py --opts dataset afhq_cat train False eval True problem denoising start_batch 40 max_batch 10 batch_size_ip 4 method pnp_flow_fbs adaptive_noise False
+# python main.py --opts dataset afhq_cat train False eval True problem paintbrush_inpainting start_batch 45 max_batch 10 batch_size_ip 4 method pnp_flow_fbs adaptive_noise False
+# python main.py --opts dataset afhq_cat train False eval True problem superresolution start_batch 50 max_batch 10 batch_size_ip 4 method pnp_flow_fbs adaptive_noise False
+# python main.py --opts dataset afhq_cat train False eval True problem gaussian_deblurring_FFT start_batch 55 max_batch 10 batch_size_ip 4 method pnp_flow_fbs adaptive_noise False
 
-# python main.py --opts dataset afhq_cat train False eval True problem inpainting start_batch 30 max_batch 10 batch_size_ip 4 method pnp_flow_fbs random_noise True
-# python main.py --opts dataset afhq_cat train False eval True problem random_inpainting start_batch 35 max_batch 10 batch_size_ip 4 method pnp_flow_fbs random_noise True
-# python main.py --opts dataset afhq_cat train False eval True problem denoising start_batch 40 max_batch 10 batch_size_ip 4 method pnp_flow_fbs random_noise True
-# python main.py --opts dataset afhq_cat train False eval True problem paintbrush_inpainting start_batch 45 max_batch 10 batch_size_ip 4 method pnp_flow_fbs random_noise True
-# python main.py --opts dataset afhq_cat train False eval True problem superresolution start_batch 50 max_batch 10 batch_size_ip 4 method pnp_flow_fbs random_noise True
-# python main.py --opts dataset afhq_cat train False eval True problem gaussian_deblurring_FFT start_batch 55 max_batch 10 batch_size_ip 4 method pnp_flow_fbs random_noise True
+# python main.py --opts dataset afhq_cat train False eval True problem inpainting start_batch 30 max_batch 10 batch_size_ip 4 method pnp_flow_fbs adaptive_noise True
+# python main.py --opts dataset afhq_cat train False eval True problem random_inpainting start_batch 35 max_batch 10 batch_size_ip 4 method pnp_flow_fbs adaptive_noise True
+# python main.py --opts dataset afhq_cat train False eval True problem denoising start_batch 40 max_batch 10 batch_size_ip 4 method pnp_flow_fbs adaptive_noise True
+# python main.py --opts dataset afhq_cat train False eval True problem paintbrush_inpainting start_batch 45 max_batch 10 batch_size_ip 4 method pnp_flow_fbs adaptive_noise True
+# python main.py --opts dataset afhq_cat train False eval True problem superresolution start_batch 50 max_batch 10 batch_size_ip 4 method pnp_flow_fbs adaptive_noise True
+# python main.py --opts dataset afhq_cat train False eval True problem gaussian_deblurring_FFT start_batch 55 max_batch 10 batch_size_ip 4 method pnp_flow_fbs adaptive_noise True
 
 # echo "ADMM"
 
@@ -287,9 +287,9 @@ RANDOM=42
 
 ########################################################################################################################################
 
-# important for paper 100 data result
+
 # echo "Celeba"
-dataset="afhq_cat"  #"afhq_cat"
+dataset="celeba"  #"afhq_cat"
 
 # list of problems (no fixed values anymore)
 problems=(
@@ -301,38 +301,41 @@ problems=(
   paintbrush_inpainting
 )
 
-# methods grouped by config
-methods_batch4=("pnp_flow_fbs" "pnp_flow_admm" "ot_ode")
-methods_batch1=("flow_priors" "d_flow")
+########################################################################################################################################
+# # important for paper 100 data result
 
-for problem in "${problems[@]}"; do
-  # assign random number between 1 and 100
-  start_batch=$((RANDOM % 10 + 1))
+# # methods grouped by config
+# methods_batch4=("pnp_flow_fbs" "pnp_flow_admm" "ot_ode")
+# methods_batch1=("flow_priors" "d_flow")
 
-  echo "Running $problem with start_batch=$start_batch"
+# for problem in "${problems[@]}"; do
+#   # assign random number between 1 and 100
+#   start_batch=$((RANDOM % 10 + 1))
 
-  # methods with batch_size_ip=4
-  for method in "${methods_batch4[@]}"; do
-    python main.py --opts \
-      dataset "$dataset" train False eval True \
-      problem "$problem" start_batch "$start_batch" \
-      max_batch 5 batch_size_ip 4 method "$method"      # max_batch 10 batch_size_ip 10 method
-  done
+#   echo "Running $problem with start_batch=$start_batch"
 
-  # methods with batch_size_ip=1
-  for method in "${methods_batch1[@]}"; do
-    python main.py --opts \
-      dataset "$dataset" train False eval True \
-      problem "$problem" start_batch "$start_batch" \
-      max_batch 5 batch_size_ip 4 method "$method"       # max_batch 50 batch_size_ip 2 method
-  done
-done
+#   # methods with batch_size_ip=4
+#   for method in "${methods_batch4[@]}"; do
+#     python main.py --opts \
+#       dataset "$dataset" train False eval True \
+#       problem "$problem" start_batch "$start_batch" \
+#       max_batch 10 batch_size_ip 10 method "$method"      # max_batch 10 batch_size_ip 10 method # max_batch 5 batch_size_ip 4 method "$method"
+#   done
+
+#   # methods with batch_size_ip=1
+#   for method in "${methods_batch1[@]}"; do
+#     python main.py --opts \
+#       dataset "$dataset" train False eval True \
+#       problem "$problem" start_batch "$start_batch" \
+#       max_batch 50 batch_size_ip 2 method "$method"       # max_batch 50 batch_size_ip 2 method # max_batch 5 batch_size_ip 4 method "$method"
+#   done
+# done
 
 
+########################################################################################################################################
 
-
-# # for only admm
-# method="pnp_flow_admm"
+# # for only single
+# method="d_flow"   #"pnp_flow_admm"
 
 # for problem in "${problems[@]}"; do
 #   # assign random number between 1 and 10
@@ -341,8 +344,115 @@ done
 #   python main.py --opts \
 #     dataset "$dataset" train False eval True \
 #     problem "$problem" start_batch "$start_batch" \
-#     max_batch 1 batch_size_ip 10 method "$method"
+#     max_batch 50 batch_size_ip 2 method "$method"
 # done
+
+
+########################################################################################################################################
+# for ablation studies
+
+methods=("pnp_flow_fbs" "pnp_flow_admm")
+adaptive_options=(False True)
+deterministic_options=(True False)
+
+for problem in "${problems[@]}"; do
+  start_batch=$((RANDOM % 10 + 1))
+  echo "Running $problem with start_batch=$start_batch"
+
+  for method in "${methods[@]}"; do
+    if [[ "$method" == "pnp_flow_fbs" ]]; then
+      echo "FBS"
+    else
+      echo "ADMM"
+    fi
+
+    for adaptive in "${adaptive_options[@]}"; do
+      if [[ "$method" == "pnp_flow_admm" && "$adaptive" == "False" ]]; then
+        for deterministic in "${deterministic_options[@]}"; do
+          python main.py --opts dataset $dataset train False eval True problem $problem start_batch $start_batch max_batch 5 batch_size_ip 5 method $method adaptive_noise $adaptive deterministic_noise $deterministic
+        done
+      else
+        python main.py --opts dataset $dataset train False eval True problem $problem start_batch $start_batch max_batch 5 batch_size_ip 5 method $method adaptive_noise $adaptive
+      fi
+    done
+  done
+done
+
+# dataset="afhq_cat"
+# methods=("pnp_flow_fbs" "pnp_flow_admm")
+# adaptive_options=(False True)
+# deterministic_options=(True False)
+
+# problems=(
+#   inpainting
+#   random_inpainting
+#   denoising
+#   paintbrush_inpainting
+#   superresolution
+#   gaussian_deblurring_FFT
+# )
+
+# start_batches=(30 35 40 45 50 55)
+
+# for i in "${!problems[@]}"; do
+#   problem="${problems[$i]}"
+#   start_batch="${start_batches[$i]}"
+
+#   echo "Running $problem with start_batch=$start_batch"
+
+#   for method in "${methods[@]}"; do
+#     if [[ "$method" == "pnp_flow_fbs" ]]; then
+#       echo "FBS"
+#     else
+#       echo "ADMM"
+#     fi
+
+#     for adaptive in "${adaptive_options[@]}"; do
+#       if [[ "$method" == "pnp_flow_admm" && "$adaptive" == "False" ]]; then
+#         for deterministic in "${deterministic_options[@]}"; do
+#           python main.py --opts \
+#             dataset "$dataset" \
+#             train False \
+#             eval True \
+#             problem "$problem" \
+#             start_batch "$start_batch" \
+#             max_batch 10 \
+#             batch_size_ip 4 \
+#             method "$method" \
+#             adaptive_noise "$adaptive" \
+#             deterministic_noise "$deterministic" \
+#             steps_pnp 300
+#         done
+#       elif [[ "$method" == "pnp_flow_admm" ]]; then
+#         python main.py --opts \
+#           dataset "$dataset" \
+#           train False \
+#           eval True \
+#           problem "$problem" \
+#           start_batch "$start_batch" \
+#           max_batch 10 \
+#           batch_size_ip 4 \
+#           method "$method" \
+#           adaptive_noise "$adaptive" \
+#           steps_pnp 300
+#       else
+#         python main.py --opts \
+#           dataset "$dataset" \
+#           train False \
+#           eval True \
+#           problem "$problem" \
+#           start_batch "$start_batch" \
+#           max_batch 10 \
+#           batch_size_ip 4 \
+#           method "$method" \
+#           adaptive_noise "$adaptive"
+#       fi
+#     done
+#   done
+# done
+
+
+
 
 # echo "CAT"
 

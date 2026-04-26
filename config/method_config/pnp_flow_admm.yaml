@@ -1,9 +1,10 @@
 METHOD:
-    steps_pnp: 250
-    rho_admm: 500   
+    steps_pnp: 200
+    rho_admm: 1000   
     max_cgiter: 10    
     cg_tol: 1e-5
     save_norms_admm: False
     adaptive_noise: True
+    deterministic_noise: False  # Only applicable when adaptive_noise is False
     
     
