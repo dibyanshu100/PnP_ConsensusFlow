@@ -1,28 +1,27 @@
-# PnP-Flow-ADMM: Plug-and-Play Flow Matching with ADMM
+![build](https://github.com/annegnx/PnP-Flow/actions/workflows/main.yml/badge.svg)
+![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)
+# Flow-Guided Plug-and-Play ADMM for Inverse Problems in Imaging
 
 This repository contains the implementation of **PnP-Flow-ADMM**, a method for solving inverse problems using **Plug-and-Play (PnP) priors with flow matching models**, optimized via **ADMM (Alternating Direction Method of Multipliers)**.
-
-Our approach extends the PnP-Flow framework (ICLR 2025), which uses Forward-Backward Splitting (FBS), by introducing:
-
-* **ADMM-based optimization** for improved convergence stability
-* **Reduced computational cost** via fewer denoiser evaluations
-* **Adaptive projection strategies** for improved reconstruction quality
+Our implementation is adapted from the PnP-Flow (ICLR 2025) codebase, which is based on a 
+Forward-Backward Splitting (FBS) formulation. 
 
 ---
 
 ## Overview
 
-Plug-and-Play (PnP) methods solve inverse problems by combining:
+Inverse problems aim to recover signals from degraded measurements and are typically ill-posed.
+Plug-and-Play (PnP) methods address this by integrating pretrained generative priors, with recent work leveraging efficient flow matching models.
+However, existing PnP approaches can push iterates away from the learned flow trajectories, 
+reducing the effectiveness of the prior.
 
-* a **data-fidelity term** (forward model)
-* a **learned prior** (denoiser / generative model)
+We propose PnP-Flow-ADMM, a framework that improves the integration of flow priors within PnP methods.
 
-PnP-Flow integrates **flow matching models** as priors.
-In this work, we replace the FBS scheme with an **ADMM formulation**, leading to:
+Our contributions includes:
+* **ADMM-based optimization with flow priors** for better data–prior consistency
+* **Trajectory correction mechanism** to keep iterates aligned with flow dynamics
+* **Improved efficiency** with fewer denoiser evaluations and lower runtime
 
-* better optimization behavior
-* improved performance across inverse problems
-* efficient use of pretrained flow models
 
 <p align="center">
   <img src="al_comparisons_paper.png" width="800"/>
