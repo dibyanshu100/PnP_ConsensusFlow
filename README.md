@@ -41,128 +41,68 @@ Our contributions includes:
 * deepinv
 ---
 
-## 1.2 Download Datasets and Pretrained Models
+## Download Datasets and Pretrained Models
 
-We provide a `download.sh` script to download the datasets and pretrained flow-matching checkpoints used in our experiments. The files are downloaded from Google Drive using `gdown`.
+We provide a `download.sh` script to download datasets and pretrained flow-matching checkpoints from Google Drive.
 
-First install `gdown` if needed:
+Install dependency (if needed):
 
 ```bash
 pip install gdown
 ```
 
-### CelebA
+---
 
-To download and prepare the CelebA dataset:
-
-```bash
-bash download.sh celeba-dataset
-```
-
-This will download the dataset, extract all images, and create an 80/10/10 train/validation/test split.
-
-The final directory structure will be:
-
-```text
-data/celeba/
-├── img_align_celeba/
-├── train/
-├── val/
-├── test/
-└── list_eval_partition.csv
-```
-
-To download the pretrained flow-matching model for CelebA:
+### Usage
 
 ```bash
-bash download.sh pretrained-network-celeba
+bash download.sh <option>
 ```
 
-The checkpoint will be stored at:
-
-```text
-model/celeba/ot/model_final.pt
-```
-
-### AFHQ-Cat
-
-To download and prepare the AFHQ-Cat dataset:
+Available options:
 
 ```bash
-bash download.sh afhq-cat-dataset
-```
-
-The dataset will be extracted into:
-
-```text
-data/afhq_cat/
-```
-
-To download the pretrained flow-matching model for AFHQ-Cat:
-
-```bash
-bash download.sh pretrained-network-afhq-cat
-```
-
-The checkpoint will be stored at:
-
-```text
-model/afhq_cat/ot/model_final.pt
-```
-
-### Available Download Arguments
-
-The download script supports the following arguments:
-
-```bash
-bash download.sh celeba-dataset
-bash download.sh afhq-cat-dataset
-bash download.sh pretrained-network-celeba
-bash download.sh pretrained-network-afhq-cat
-```
-
-
-## 2. Training Flow Matching Models
-
-You can train your own flow matching model using:
-
-```bash
-python main.py --opts dataset celeba train True eval False batch_size 128 num_epoch 100
-```
-
-Models are saved in:
-
-```
-./model/<dataset>/<prior_type>/ot/
-```
-
-Generated samples are saved in:
-
-```
-./results/<dataset>/<prior_type>/ot/
+celeba-dataset
+afhq-cat-dataset
+pretrained-network-celeba
+pretrained-network-afhq-cat
 ```
 
 ---
 
-## 3. Solving Inverse Problems
+### Output Structure
 
-This project support the following inverse problems:
+* **CelebA**
 
-* **Denoising**
-* **Gaussian Deblurring**
-* **Super-resolution**
-* **Inpainting**
+  * Dataset: `data/celeba/` (automatically split into train/val/test)
+  * Model: `model/celeba/ot/model_final.pt`
 
-  * Box inpainting
-  * Random inpainting
-  * Free-form (paintbrush) inpainting
+* **AFHQ-Cat**
+
+  * Dataset: `data/afhq_cat/`
+  * Model: `model/afhq_cat/ot/model_final.pt`
+
+
+
+## Solving Inverse Problems
+
+This project supports the following inverse problems:
+
+* **Denoising** - `denoising`
+* **Gaussian Deblurring** - `gaussian_deblurring_FFT`
+* **Super-resolution** - `superresolution`
+* **Box Inpainting** - `inpainting`
+* **Random Inpainting** - `random_inpainting`
+* **Paintbrush Inpainting** - `paintbrush_inpainting`
 
 ---
 
 ### Available Methods
 
-* `pnp_flow_admm` — **Proposed method (ADMM-based)**
-* `pnp_flow_fbs` — PnP-Flow (FBS-based)
+To run a specific method, you must pass its name using the `method` argument.
+
+* `pnp_flow_admm` — **Proposed method**
+* `pnp_flow_fbs`
 * `ot_ode`
 * `d_flow`
 * `flow_priors`
@@ -182,60 +122,52 @@ python main.py --opts \
 
 ---
 
-### 3.1 Hyperparameter Tuning
+You can replace `dataset celeba` with:
 
-To find optimal parameters:
+* `dataset afhq_cat` (for AFHQ-Cat)
+
+Replace `problem` and `method` with the desired options from the lists above.
+
+### Hyperparameters (PnP-ADMM)
+
+The key hyperparameters for the `pnp_flow_admm` method are:
+
+* `steps_pnp` — Number of ADMM iterations (default: 200)
+* `rho_admm` — ADMM penalty parameter controlling data–prior balance (default: 1000)
+* `max_cgiter` — Maximum number of conjugate gradient iterations for the data-consistency step (default: 10)
+* `cg_tol` — Tolerance for the conjugate gradient solver (default: 1e-5)
+* `save_norms_admm` — Whether to store ADMM residual norms for analysis (default: False)
+### Projection Settings
+* `adaptive_noise=True` — Uses the proposed **adaptive projection strategy** (recommended)
+* `adaptive_noise=False`, `deterministic_noise=True` — Uses **deterministic projections**
+* `adaptive_noise=False`, `deterministic_noise=False` — Uses **random projections**
+
+
+## Evaluation
+We provide a script to reproduce the main results, including **quantitative evaluation, runtime, and memory measurements**.
+The experiments are run across:
+
+* Datasets: `celeba`, `afhq_cat`
+* Multiple inverse problems
+* All supported methods
+
+Each run processes batches of size 4 and evaluates performance over multiple batches.
+---
+
+### Run All Experiments
 
 ```bash
-bash scripts/script_val.sh
+bash scripts/main_results.sh
 ```
-
-Important parameters for ADMM:
-
-* `rho` — penalty parameter
-* `num_steps` — number of iterations
-* `adaptive` — enable adaptive projections
-
 ---
+### Experiment Details
+* For each dataset and problem, a random starting batch is selected
+* Evaluation is performed over **25 batches**
+* Runtime and GPU memory usage are recorded during execution
+* Results are averaged across batches for fair comparison
+* The same experimental setup is used for all methods
+* Time and memory statistics reported in the paper are also computed using the results of this script
 
-### 3.2 Evaluation
-
-```bash
-bash scripts/script_test.sh
-```
-
-Results are saved in:
-
-```
-./results/<dataset>/<task>/
-```
-
----
-
-## Computational Complexity
-
-Compared to FBS-based PnP-Flow:
-
-* FBS requires **multiple denoiser calls per iteration**
-* ADMM uses **a single denoiser call per iteration**
-
-This leads to:
-
-* Reduced computational cost
-* Faster runtime in practice
-* Improved scalability
-
----
-
-## Key Contributions
-
-* ADMM-based Plug-and-Play framework for flow matching priors
-* Improved convergence compared to FBS
-* Reduced number of denoiser evaluations
-* Adaptive projection strategy for enhanced reconstruction
-* Extensive evaluation across inverse problems
-
----
 
 ## Project Structure
 
@@ -247,25 +179,19 @@ This leads to:
 ├── scripts/         # Bash scripts for experiments
 ├── main.py          # Main entry point
 ```
-
 ---
-
 ## License
 
 This project is licensed under the **BSD 3-Clause License**.
-
 This repository builds upon the PnP-Flow codebase.
 Please refer to the `LICENSE` file for details.
-
 ---
 
 ## Acknowledgements
 
 This repository builds upon the following works:
-
 * PnP-Flow (ICLR 2025)
 * GSPnP
 * DeepInv library
 * Rectified Flow
-
 We thank the authors for making their code publicly available.
