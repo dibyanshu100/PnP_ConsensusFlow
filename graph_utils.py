@@ -390,8 +390,8 @@ def plot_convergence_two_datasets_shared_legend(
 ):
     plt.rcParams.update({
         "font.size": 16,
-        "axes.titlesize": 20,
-        "axes.labelsize": 18,
+        "axes.titlesize": 22,
+        "axes.labelsize": 22,
         "xtick.labelsize": 15,
         "ytick.labelsize": 15,
         "legend.fontsize": 16,
