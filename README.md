@@ -74,7 +74,7 @@ pretrained-network-afhq-cat
 
 * **CelebA**
 
-  * Dataset: `data/celeba/` (automatically split into train/val/test)
+  * Dataset: `data/celeba/` 
   * Model: `model/celeba/ot/model_final.pt`
 
 * **AFHQ-Cat**
@@ -179,14 +179,6 @@ bash scripts/main_results.sh
 ├── scripts/         # Bash scripts for experiments
 ├── main.py          # Main entry point
 ```
----
-## License
-
-This project is licensed under the **BSD 3-Clause License**.
-This repository builds upon the PnP-Flow codebase.
-Please refer to the `LICENSE` file for details.
----
-
 ## Acknowledgements
 
 This repository builds upon the following works:
