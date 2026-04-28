@@ -25,7 +25,7 @@ In this work, we replace the FBS scheme with an **ADMM formulation**, leading to
 * efficient use of pretrained flow models
 
 <p align="center">
-  <img src="assets/teaser.png" width="800"/>
+  <img src="al_comparisons_paper.png" width="800"/>
 </p>
 
 ---
