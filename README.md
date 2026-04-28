@@ -1,10 +1,11 @@
 ![build](https://github.com/annegnx/PnP-Flow/actions/workflows/main.yml/badge.svg)
 ![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)
+
 # Flow-Guided Plug-and-Play ADMM for Inverse Problems in Imaging
 
 This repository contains the implementation of **PnP-Flow-ADMM**, a method for solving inverse problems using **Plug-and-Play (PnP) priors with flow matching models**, optimized via **ADMM (Alternating Direction Method of Multipliers)**.
-Our implementation is adapted from the PnP-Flow (ICLR 2025) codebase, which is based on a 
-Forward-Backward Splitting (FBS) formulation. 
+
+Our implementation is adapted from the PnP-Flow (ICLR 2025) codebase, which is based on a Forward-Backward Splitting (FBS) formulation.
 
 ---
 
@@ -12,23 +13,24 @@ Forward-Backward Splitting (FBS) formulation.
 
 Inverse problems aim to recover signals from degraded measurements and are typically ill-posed.
 Plug-and-Play (PnP) methods address this by integrating pretrained generative priors, with recent work leveraging efficient flow matching models.
-However, existing PnP approaches can push iterates away from the learned flow trajectories, 
-reducing the effectiveness of the prior.
+However, existing PnP approaches can push iterates away from the learned flow trajectories, reducing the effectiveness of the prior.
 
-We propose PnP-Flow-ADMM, a framework that improves the integration of flow priors within PnP methods.
+We propose **PnP-Flow-ADMM**, a framework that improves the integration of flow priors within PnP methods.
 
-Our contributions includes:
+**Our contributions include:**
+
 * **ADMM-based optimization with flow priors** for better data–prior consistency
 * **Trajectory correction mechanism** to keep iterates aligned with flow dynamics
 * **Improved efficiency** with fewer denoiser evaluations and lower runtime
-
 
 <p align="center">
   <img src="al_comparisons_paper.png" width="800"/>
 </p>
 
 ---
-## 1.1 Requirements
+
+## Requirements
+
 * Python ≥ 3.9
 * torch ≥ 1.13.1
 * torchvision
@@ -39,6 +41,7 @@ Our contributions includes:
 * pyyaml
 * torchdiffeq
 * deepinv
+
 ---
 
 ## Download Datasets and Pretrained Models
@@ -74,7 +77,7 @@ pretrained-network-afhq-cat
 
 * **CelebA**
 
-  * Dataset: `data/celeba/` 
+  * Dataset: `data/celeba/`
   * Model: `model/celeba/ot/model_final.pt`
 
 * **AFHQ-Cat**
@@ -82,7 +85,7 @@ pretrained-network-afhq-cat
   * Dataset: `data/afhq_cat/`
   * Model: `model/afhq_cat/ot/model_final.pt`
 
-
+---
 
 ## Solving Inverse Problems
 
@@ -128,30 +131,38 @@ You can replace `dataset celeba` with:
 
 Replace `problem` and `method` with the desired options from the lists above.
 
-### Hyperparameters (PnP-ADMM)
+---
+
+## Hyperparameters (PnP-ADMM)
 
 The key hyperparameters for the `pnp_flow_admm` method are:
 
 * `steps_pnp` — Number of ADMM iterations (default: 200)
 * `rho_admm` — ADMM penalty parameter controlling data–prior balance (default: 1000)
-* `max_cgiter` — Maximum number of conjugate gradient iterations for the data-consistency step (default: 10)
-* `cg_tol` — Tolerance for the conjugate gradient solver (default: 1e-5)
-* `save_norms_admm` — Whether to store ADMM residual norms for analysis (default: False)
-### Projection Settings
-* `adaptive_noise=True` — Uses the proposed **adaptive projection strategy** (recommended)
-* `adaptive_noise=False`, `deterministic_noise=True` — Uses **deterministic projections**
-* `adaptive_noise=False`, `deterministic_noise=False` — Uses **random projections**
+* `max_cgiter` — Maximum number of conjugate gradient iterations (default: 10)
+* `cg_tol` — Tolerance for the CG solver (default: 1e-5)
+* `save_norms_admm` — Store ADMM residual norms (default: False)
 
+### Projection Settings
+
+* `adaptive_noise=True` — **Adaptive projection (recommended)**
+* `adaptive_noise=False`, `deterministic_noise=True` — Deterministic projections
+* `adaptive_noise=False`, `deterministic_noise=False` — Random projections
+
+---
 
 ## Evaluation
+
 We provide a script to reproduce the main results, including **quantitative evaluation, runtime, and memory measurements**.
-The experiments are run across:
+
+Experiments are run across:
 
 * Datasets: `celeba`, `afhq_cat`
 * Multiple inverse problems
 * All supported methods
 
 Each run processes batches of size 4 and evaluates performance over multiple batches.
+
 ---
 
 ### Run All Experiments
@@ -159,15 +170,19 @@ Each run processes batches of size 4 and evaluates performance over multiple bat
 ```bash
 bash scripts/main_results.sh
 ```
----
-### Experiment Details
-* For each dataset and problem, a random starting batch is selected
-* Evaluation is performed over **25 batches**
-* Runtime and GPU memory usage are recorded during execution
-* Results are averaged across batches for fair comparison
-* The same experimental setup is used for all methods
-* Time and memory statistics reported in the paper are also computed using the results of this script
 
+---
+
+### Experiment Details
+
+* Random starting batch per run
+* Evaluation over **25 batches**
+* Runtime and GPU memory recorded
+* Results averaged across batches
+* Same setup across all methods
+* Reported time/memory metrics are computed using this script
+
+---
 
 ## Project Structure
 
@@ -179,11 +194,24 @@ bash scripts/main_results.sh
 ├── scripts/         # Bash scripts for experiments
 ├── main.py          # Main entry point
 ```
+
+---
+
+## License
+
+This project is licensed under the **BSD 3-Clause License**.
+This repository builds upon the PnP-Flow codebase.
+See the `LICENSE` file for details.
+
+---
+
 ## Acknowledgements
 
 This repository builds upon the following works:
+
 * PnP-Flow (ICLR 2025)
 * GSPnP
-* DeepInv library
+* DeepInv
 * Rectified Flow
+
 We thank the authors for making their code publicly available.
