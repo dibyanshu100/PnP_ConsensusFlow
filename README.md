@@ -1,4 +1,3 @@
-![build](https://github.com/annegnx/PnP-Flow/actions/workflows/main.yml/badge.svg)
 ![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)
 
 # Flow-Guided Plug-and-Play ADMM for Inverse Problems in Imaging
