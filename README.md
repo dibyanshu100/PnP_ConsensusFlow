@@ -28,7 +28,7 @@ We propose **PnP-Flow-ADMM**, a framework that improves the integration of flow 
 
 ---
 
-## Requirements
+<!-- ## Requirements
 
 * Python ≥ 3.9
 * torch ≥ 1.13.1
@@ -41,7 +41,7 @@ We propose **PnP-Flow-ADMM**, a framework that improves the integration of flow 
 * torchdiffeq
 * deepinv
 
----
+--- -->
 
 ## Download Datasets and Pretrained Models
 
@@ -180,6 +180,12 @@ bash scripts/main_results.sh
 * Results averaged across batches
 * Same setup across all methods
 * Reported time/memory metrics are computed using this script
+
+---
+
+### Appendix Results
+
+Appendix results can be reproduced using `scripts/ablation_results.sh`, with additional variants such as early-stopping ADMM and Tikhonov denoising available by using `pnpflow/methods/pnp_flow_admm_early_stop.py` and `pnpflow/methods/pnp_denoising_tikhonov.py` in place of the main method.
 
 ---
 
