@@ -289,16 +289,20 @@ RANDOM=42
 
 
 # echo "Celeba"
-dataset="celeba"  #"afhq_cat"
+dataset="afhq_cat"  #"afhq_cat"
 
 # list of problems (no fixed values anymore)
+# problems=(
+#   denoising
+#   inpainting
+#   superresolution
+#   random_inpainting
+#   gaussian_deblurring_FFT
+#   paintbrush_inpainting
+# )
+
 problems=(
   denoising
-  inpainting
-  superresolution
-  random_inpainting
-  gaussian_deblurring_FFT
-  paintbrush_inpainting
 )
 
 ########################################################################################################################################
@@ -334,49 +338,49 @@ problems=(
 
 ########################################################################################################################################
 
-# # for only single
-# method="d_flow"   #"pnp_flow_admm"
+# for only single
+method="pnp_flow_admm"   #"pnp_flow_admm"
 
-# for problem in "${problems[@]}"; do
-#   # assign random number between 1 and 10
-#   start_batch=$((RANDOM % 10 + 1))
-#   echo "Running $problem with start_batch=$start_batch"
-#   python main.py --opts \
-#     dataset "$dataset" train False eval True \
-#     problem "$problem" start_batch "$start_batch" \
-#     max_batch 50 batch_size_ip 2 method "$method"
-# done
+for problem in "${problems[@]}"; do
+  # assign random number between 1 and 10
+  start_batch=$((RANDOM % 10 + 1))
+  echo "Running $problem with start_batch=$start_batch"
+  python main.py --opts \
+    dataset "$dataset" train False eval True \
+    problem "$problem" start_batch "$start_batch" \
+    max_batch 5 batch_size_ip 10 method "$method"
+done
 
 
 ########################################################################################################################################
-# for ablation studies
+# # for ablation studies
 
-methods=("pnp_flow_fbs" "pnp_flow_admm")
-adaptive_options=(False True)
-deterministic_options=(True False)
+# methods=("pnp_flow_fbs" "pnp_flow_admm")
+# adaptive_options=(False True)
+# deterministic_options=(True False)
 
-for problem in "${problems[@]}"; do
-  start_batch=$((RANDOM % 10 + 1))
-  echo "Running $problem with start_batch=$start_batch"
+# for problem in "${problems[@]}"; do
+#   start_batch=$((RANDOM % 10 + 1))
+#   echo "Running $problem with start_batch=$start_batch"
 
-  for method in "${methods[@]}"; do
-    if [[ "$method" == "pnp_flow_fbs" ]]; then
-      echo "FBS"
-    else
-      echo "ADMM"
-    fi
+#   for method in "${methods[@]}"; do
+#     if [[ "$method" == "pnp_flow_fbs" ]]; then
+#       echo "FBS"
+#     else
+#       echo "ADMM"
+#     fi
 
-    for adaptive in "${adaptive_options[@]}"; do
-      if [[ "$method" == "pnp_flow_admm" && "$adaptive" == "False" ]]; then
-        for deterministic in "${deterministic_options[@]}"; do
-          python main.py --opts dataset $dataset train False eval True problem $problem start_batch $start_batch max_batch 5 batch_size_ip 5 method $method adaptive_noise $adaptive deterministic_noise $deterministic
-        done
-      else
-        python main.py --opts dataset $dataset train False eval True problem $problem start_batch $start_batch max_batch 5 batch_size_ip 5 method $method adaptive_noise $adaptive
-      fi
-    done
-  done
-done
+#     for adaptive in "${adaptive_options[@]}"; do
+#       if [[ "$method" == "pnp_flow_admm" && "$adaptive" == "False" ]]; then
+#         for deterministic in "${deterministic_options[@]}"; do
+#           python main.py --opts dataset $dataset train False eval True problem $problem start_batch $start_batch max_batch 5 batch_size_ip 5 method $method adaptive_noise $adaptive deterministic_noise $deterministic
+#         done
+#       else
+#         python main.py --opts dataset $dataset train False eval True problem $problem start_batch $start_batch max_batch 5 batch_size_ip 5 method $method adaptive_noise $adaptive
+#       fi
+#     done
+#   done
+# done
 
 # dataset="afhq_cat"
 # methods=("pnp_flow_fbs" "pnp_flow_admm")

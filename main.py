@@ -18,8 +18,6 @@ from pnpflow.methods.pnp_flow_fbs import PNP_FLOW_FBS
 from pnpflow.methods.d_flow import D_FLOW
 from pnpflow.methods.ot_ode import OT_ODE
 from pnpflow.methods.flow_priors import FLOW_PRIORS
-from pnpflow.methods.pnp_gs import PROX_PNP
-from pnpflow.methods.pnp_diff import PNP_DIFF
 from pnpflow.utils import gaussian_blur, define_model, load_model
 import warnings
 warnings.filterwarnings("ignore", module="matplotlib\\..*")
@@ -209,10 +207,6 @@ def main():
             method = OT_ODE(model, device, args)
         elif args.method == 'flow_priors':
             method = FLOW_PRIORS(model, device, args)
-        elif args.method == 'pnp_gs':
-            method = PROX_PNP(generative_method, device, args)
-        elif args.method == 'pnp_diff':
-            method = PNP_DIFF(model, device, args)
         else:
             raise ValueError("The method your entered does not exist")
 

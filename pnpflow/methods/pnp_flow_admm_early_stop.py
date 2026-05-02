@@ -1,13 +1,13 @@
 import torch
-import torch
 import numpy as np
 import os
 from time import perf_counter
 import pnpflow.image_generation.models.utils as mutils
 import pnpflow.utils as utils
+import matplotlib.pyplot as plt
 
 
-class PNP_FLOW(object):
+class PNP_FLOW_ADMM(object):
 
     def __init__(self, model, device, args):
         self.device = device
@@ -21,23 +21,22 @@ class PNP_FLOW(object):
         d = r
         eps = 1e-12
         for _ in range(max_iter):
-            z = A(d)
+            l = A(d)
             rr = torch.sum(r**2)
-            alpha = rr/(torch.sum(d*z) +eps)
+            alpha = rr/(torch.sum(d*l) +eps)
             x += alpha*d
-            r -= alpha*z
+            r -= alpha*l
             if torch.norm(r)/(torch.norm(b)+eps) < tol:
                 break
             beta = torch.sum(r**2)/(rr+eps)
             d = r + beta*d        
         return x
     
-
     
-    def admm_x_update(self, x_init, v, u, y, H, H_adj, rho, sigma_noise, max_cgiter=50, cg_tol=1e-6):
+    def admm_x_update(self, x_init, z, u, y, H, H_adj, rho, sigma_noise, max_cgiter=50, cg_tol=1e-6):
         """
         Solve:
-            (1/sigma^2 H^T H + rho I)x = 1/sigma^2 H^T y + rho (v-u)
+            (1/sigma^2 H^T H + rho I)x = 1/sigma^2 H^T y + rho (z-u)
         using conjugate gradient
         """
         sigma2_inv = 1.0 / (sigma_noise ** 2)
@@ -45,7 +44,7 @@ class PNP_FLOW(object):
         def A(x):
             return sigma2_inv * H_adj(H(x)) + rho * x
 
-        b = sigma2_inv * H_adj(y) + rho * (v - u)
+        b = sigma2_inv * H_adj(y) + rho * (z - u)
 
         x = self.conjugate_gradient(A, b, x_init, max_iter=max_cgiter, tol=cg_tol)
         return x
@@ -56,43 +55,49 @@ class PNP_FLOW(object):
 
         elif self.args.model == "rectified":
             model_fn = mutils.get_model_fn(self.model, train=False)
-            t_ = t[:, None, None, None]
-            v = model_fn(x.type(torch.float), t * 999)
-            return v
+            z = model_fn(x.type(torch.float), t * 999)
+            return z
+
+    # projection step
+    def projection_step(self, x, t, noise):
+        return t * x + noise*(1-t)  
         
-    # the data-consistency step may need different strength
-    def learning_rate_strat(self, lr, t):
-        t = t.view(-1, 1, 1, 1)
-        gamma_styles = {
-            '1_minus_t': lambda lr, t: lr * (1 - t),                    # Step size decreases linearly as t increases
-            'sqrt_1_minus_t': lambda lr, t: lr * torch.sqrt(1 - t),     # smoother decay
-            'constant': lambda lr, t: lr,                               # constant
-            'alpha_1_minus_t': lambda lr, t: lr * (1 - t)**self.args.alpha,    # generalized polynomial decay controlled by alpha
-        }
-        return gamma_styles.get(self.args.gamma_style, lambda lr, t: lr)(lr, t)
-
-    # computes the gradient of the data-fidelity term
-    def grad_datafit(self, x, y, H, H_adj):
-        if self.args.noise_type == 'gaussian':
-            return H_adj(H(x) - y) / (self.args.sigma_noise**2)          # Gaussian noise linear operator
-        elif self.args.noise_type == 'laplace':
-            return H_adj(2*torch.heaviside(H(x)-y, torch.zeros_like(H(x)))-1)/self.args.sigma_noise
-        else:
-            raise ValueError('Noise type not supported')
-
-    # The controversial interpolation step
-    def interpolation_step(self, x, t):
-        return t * x + torch.randn_like(x) * (1 - t)
-
     
-    # The final Denoiser step
+    # Denoiser step
     def denoiser(self, x, t):
-        v = self.model_forward(x, t)                     # Run the model
-        return x + (1 - t.view(-1, 1, 1, 1)) * v         # Convert that into an image update
+        z = self.model_forward(x, t)                     # Run the model
+        return x + (1 - t.view(-1, 1, 1, 1)) * z         # Convert that into an image update
+    
+
+    def save_norms(self, primal_res_list, dual_res_list, u_inc_list, batch):
+        norms_dir = os.path.join(self.args.save_path_ip, "norms")
+        os.makedirs(norms_dir, exist_ok=True)
+
+        primal_res_array = np.array(primal_res_list, dtype=np.float32)
+        dual_res_array = np.array(dual_res_list, dtype=np.float32)
+        u_inc_array = np.array(u_inc_list, dtype=np.float32)
+
+        np.savez(
+            os.path.join(norms_dir, f"norms_batch_{batch}.npz"),
+            primal_res=primal_res_array,
+            dual_res=dual_res_array,
+            u_inc=u_inc_array
+        )
+
+        plt.figure()
+        plt.plot(primal_res_array, label=r"$\|x^k - z^k\|_2$")
+        plt.plot(dual_res_array, label=r"$\rho\|z^k - z^{k-1}\|_2$")
+        plt.plot(u_inc_array, label=r"$\|u^{k+1} - u^k\|_2$")
+        plt.xlabel("Iteration")
+        plt.ylabel("Norm value")
+        plt.title(f"ADMM Convergence Diagnostics (Batch {batch})")
+        plt.yscale("log")  # matches your writeup
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(norms_dir, f"norms_batch_{batch}.png"))
+        plt.close()
 
 
-     # H: forward degradation operator (maps image to measurement space) 
-     # H_adj: adjoint operator (maps measurement to image space)
     def solve_ip(self, test_loader, degradation, sigma_noise, H_funcs=None):
         H = degradation.H
         H_adj = degradation.H_adj
@@ -108,6 +113,9 @@ class PNP_FLOW(object):
         cg_tol = float(self.args.cg_tol)
 
         loader = iter(test_loader)
+        # skip first N batches
+        for _ in range(self.args.start_batch):
+            next(loader)
         for batch in range(self.args.max_batch):
 
             (clean_img, labels) = next(loader)
@@ -123,10 +131,21 @@ class PNP_FLOW(object):
             # Keep clean_img on CPU for metrics if your utils expect that
             noisy_img, clean_img_cpu = noisy_img.to(self.device), clean_img.to('cpu')
 
-            # ADMM initialization: better than random init for inverse problems
-            x = H_adj(noisy_img).to(self.device)
-            v = x.clone()
+            # ADMM initialization
+            x = torch.randn(clean_img.shape, device=self.device)
+            z = x.clone()
             u = torch.zeros_like(x)
+            gauss_noise = x.clone()
+            # Early stopping for denoising
+            dual_prev = None
+            dual_increase_count = 0
+            max_dual_increases = 4
+
+            # Optional norm tracking
+            if self.args.save_norms_admm:
+                u_norm_list = []
+                res_norm_list = []
+                dual_res_list = []
 
             if self.args.compute_time:
                 torch.cuda.synchronize()
@@ -134,7 +153,7 @@ class PNP_FLOW(object):
 
             if self.args.compute_memory:
                 torch.cuda.reset_max_memory_allocated(self.device)
-
+            
             with torch.no_grad():
                 for iteration in range(int(steps)):
                     if self.args.compute_time:
@@ -143,10 +162,14 @@ class PNP_FLOW(object):
                     t1 = torch.ones(len(x), device=self.device) * (delta * iteration)
                     t_view = t1.view(-1, 1, 1, 1)
 
-                    # x-update: data-consistency proximal step
+                    # Save previous values for diagnostics
+                    z_prev = z.clone()
+                    u_prev = u.clone()
+
+                    # x-update: data-consistency step
                     x = self.admm_x_update(
                         x_init=x,
-                        v=v,
+                        z=z,
                         u=u,
                         y=noisy_img,
                         H=H,
@@ -157,13 +180,54 @@ class PNP_FLOW(object):
                         cg_tol=cg_tol
                     )
 
-                    # v-update: flow prior / denoiser step
-                    v_input = x + u
-                    v_tilde = self.interpolation_step(v_input, t_view)
-                    v = self.denoiser(v_tilde, t1)
-                    
+                    # z-update: flow prior / denoiser step
+                    z_input = x + u
+                    z_tilde = self.projection_step(z_input, t_view, gauss_noise)
+                    z = self.denoiser(z_tilde, t1)
+                    gauss_noise_1 = (z_tilde - z*t_view)/ ((1-t_view) + 1e-12)
+                    gauss_noise_2 = torch.randn_like(x)
+                    w1 = t_view
+                    w2 = 1 - t_view
+
+                    if self.args.adaptive_noise:
+                        # print("PnP-ADMM with adaptive projection")
+                        gauss_noise = (w2 * gauss_noise_2 + w1 * gauss_noise_1) / torch.sqrt(w1**2 + w2**2 + 1e-12) 
+                    else:
+                        if self.args.deterministic_noise:
+                            # print("PnP-ADMM with deterministic projection")
+                            gauss_noise = gauss_noise_1
+                        else:
+                            # print("PnP-ADMM with stochastic projection")
+                            gauss_noise = gauss_noise_2
+                                        
                     # u-update: dual variable
-                    u = u + (x - v)
+                    u = u + (x-z) 
+                    
+                    # Store norms
+                    # Compute residuals
+                    primal_res = torch.norm(x - z)
+                    dual_res = rho * torch.norm(z - z_prev)
+                    u_inc = torch.norm(u - u_prev)
+
+                    # Early stopping for denoising:
+                    if self.args.problem == "denoising":
+                        max_denoising_steps = getattr(self.args, "max_denoising_steps", steps-0.15*steps) # early stopping
+                        if iteration >= max_denoising_steps:
+                            print(f"Stopping denoising at iter {iteration}")
+                            break
+
+                    # Store norms
+                    if self.args.save_norms_admm:
+                        res_norm_list.append(primal_res.item())
+                        dual_res_list.append(dual_res.item())
+                        u_norm_list.append(u_inc.item())
+
+                        print(
+                            f"Iter {iteration}: "
+                            f"||x-z||={primal_res.item():.4f}, "
+                            f"rho||z-z_prev||={dual_res.item():.4f}, "
+                            f"||u-u_prev||={u_inc.item():.4f}"
+                        )
 
                     if self.args.compute_time:
                         torch.cuda.synchronize()
@@ -172,8 +236,7 @@ class PNP_FLOW(object):
 
                     if self.args.save_results:
                         if iteration % 50 == 0 or self.should_save_image(iteration, steps):
-                            restored_img = v.detach().clone()
-                            # utils.save_images(clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration)
+                            restored_img = z.detach().clone()
                             utils.compute_psnr(
                                 clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration
                             )
@@ -183,6 +246,9 @@ class PNP_FLOW(object):
                             utils.compute_lpips(
                                 clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration
                             )
+
+            if  self.args.save_norms_admm:
+                self.save_norms(res_norm_list, dual_res_list, u_norm_list, batch)
 
             if self.args.compute_memory:
                 dict_memory = {}
@@ -197,7 +263,7 @@ class PNP_FLOW(object):
                 utils.save_time_use(dict_time, self.args)
 
             if self.args.save_results:
-                restored_img = v.detach().clone()
+                restored_img = z.detach().clone()
                 utils.save_images(
                     clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter='final'
                 )
@@ -236,3 +302,4 @@ class PNP_FLOW(object):
         # Solve the inverse problem
         self.solve_ip(
             data_loaders[self.args.eval_split], degradation, sigma_noise, H_funcs)
+
