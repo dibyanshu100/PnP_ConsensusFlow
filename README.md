@@ -28,7 +28,7 @@ We propose **PnP-Flow-ADMM**, a framework that improves the integration of flow 
 
 ---
 
-<!-- ## Requirements
+## Requirements
 
 * Python ≥ 3.9
 * torch ≥ 1.13.1
@@ -40,8 +40,16 @@ We propose **PnP-Flow-ADMM**, a framework that improves the integration of flow 
 * pyyaml
 * torchdiffeq
 * deepinv
+* opencv-python
+* pillow
+* scikit-image
+* matplotlib
+* einops
+* gdown
+* lpips
+* pytorch-fid
 
---- -->
+---
 
 ## Download Datasets and Pretrained Models
 
@@ -202,13 +210,13 @@ Appendix results can be reproduced using `scripts/ablation_results.sh`, with add
 
 ---
 
-## License
+<!-- ## License
 
 This project is licensed under the **BSD 3-Clause License**.
 This repository builds upon the PnP-Flow codebase.
 See the `LICENSE` file for details.
 
----
+--- -->
 
 ## Acknowledgements
 
