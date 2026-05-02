@@ -28,7 +28,7 @@ We propose **PnP-Flow-ADMM**, a framework that improves the integration of flow 
 
 ---
 
-## Requirements
+<!-- ## Requirements
 
 * Python ≥ 3.9
 * torch ≥ 1.13.1
@@ -49,7 +49,7 @@ We propose **PnP-Flow-ADMM**, a framework that improves the integration of flow 
 * lpips
 * pytorch-fid
 
----
+--- -->
 
 ## Download Datasets and Pretrained Models
 
