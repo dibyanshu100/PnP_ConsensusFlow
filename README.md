@@ -158,10 +158,10 @@ We provide a script to reproduce the main results, including **quantitative eval
 Experiments are run across:
 
 * Datasets: `celeba`, `afhq_cat`
-* Multiple inverse problems
-* All supported methods
+* Inverse problems: denoising, deblurring, super-resolution, inpainting, random-inpainting and paintbrush-inpainting
+* Methods: OT-ODE, Flow Prior, D-Flow, PNP-Flow-FBS, PNP-Flow-ADMM
 
-Each run processes batches of size 4 and evaluates performance over multiple batches.
+Each run processes batches of size 4 and evaluates performance over 25 batches.
 
 ---
 
