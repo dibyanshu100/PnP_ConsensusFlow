@@ -28,28 +28,16 @@ We propose **PnP-Flow-ADMM**, a framework that improves the integration of flow 
 
 ---
 
-<!-- ## Requirements
+## Requirements
 
-* Python ≥ 3.9
-* torch ≥ 1.13.1
-* torchvision
-* numpy
-* scipy
-* tqdm
-* pandas
-* pyyaml
-* torchdiffeq
-* deepinv
-* opencv-python
-* pillow
-* scikit-image
-* matplotlib
-* einops
-* gdown
-* lpips
-* pytorch-fid
+Clone the repository and install the required dependencies:
 
---- -->
+```bash
+pip install -r requirements.txt
+```
+
+This will install all the necessary Python packages required to run the project.
+
 
 ## Download Datasets and Pretrained Models
 
@@ -188,6 +176,26 @@ bash scripts/main_results.sh
 * Results averaged across batches
 * Same setup across all methods
 * Reported time/memory metrics are computed using this script
+
+---
+
+### Visualization and Analysis
+
+We provide a Jupyter notebook for visualizing results, plotting graphs, and summarizing metrics in tabular form.
+
+To use it:
+
+```bash
+jupyter notebook graphs.ipynb
+```
+
+The notebook can be used to:
+
+* Plot reconstruction results
+* Compare methods across datasets and inverse problems
+* Generate tables for quantitative evaluation
+
+Ensure that the evaluation scripts have been run beforehand so that results are available in the `results/` directory.
 
 ---
 

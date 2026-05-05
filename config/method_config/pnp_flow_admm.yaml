@@ -1,5 +1,5 @@
 METHOD:
-    steps_pnp: 1000
+    steps_pnp: 200
     rho_admm: 1000   
     max_cgiter: 10    
     cg_tol: 1e-5

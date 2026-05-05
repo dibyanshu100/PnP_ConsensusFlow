@@ -249,8 +249,7 @@ def evaluate(config,
         ds_bpd = eval_ds_bpd
         bpd_num_repeats = 5
     else:
-        raise ValueError(f"No bpd dataset {
-                         config.eval.bpd_dataset} recognized.")
+        raise ValueError(f"No bpd dataset {config.eval.bpd_dataset} recognized.")
 
     # Build the likelihood computation function when likelihood is enabled
     if config.eval.enable_bpd:
