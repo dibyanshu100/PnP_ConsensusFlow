@@ -1,18 +1,15 @@
 FILE=$1
 
-# https://drive.google.com/file/d/1-HcmIbwlFaJmGcLI5eKpDJy7EivIUQNe/view?usp=sharing
 if [ $FILE == "pretrained-network-celeba" ]; then
     OUTPUT_DIR=./model/celeba/ot
     mkdir -p $OUTPUT_DIR
     gdown 1-HcmIbwlFaJmGcLI5eKpDJy7EivIUQNe -O $OUTPUT_DIR/model_final.pt
 
-# https://drive.google.com/file/d/1OEcbfN2QNSjQVGeUIdR4YkQ1m3_B7jr6/view?usp=sharing
 elif  [ $FILE == "pretrained-network-afhq-cat" ]; then
     OUTPUT_DIR=./model/afhq_cat/ot
     mkdir -p $OUTPUT_DIR
     gdown 1OEcbfN2QNSjQVGeUIdR4YkQ1m3_B7jr6 -O $OUTPUT_DIR/model_final.pt
 
-# https://drive.google.com/file/d/1dvbCSrMG9i_1YiPrxp4Dpw3rmqXPCgCj/view?usp=sharing
 elif [ "$FILE" == "afhq-cat-dataset" ]; then
     DEST_DIR=./data/afhq_cat
     ZIP_FILE=./data/afhq-cat.zip

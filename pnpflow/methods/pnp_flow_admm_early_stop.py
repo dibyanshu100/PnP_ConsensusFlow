@@ -91,7 +91,7 @@ class PNP_FLOW_ADMM(object):
         plt.xlabel("Iteration")
         plt.ylabel("Norm value")
         plt.title(f"ADMM Convergence Diagnostics (Batch {batch})")
-        plt.yscale("log")  # matches your writeup
+        plt.yscale("log")  
         plt.legend()
         plt.grid(True)
         plt.savefig(os.path.join(norms_dir, f"norms_batch_{batch}.png"))
