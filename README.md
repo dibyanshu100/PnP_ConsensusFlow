@@ -2,7 +2,7 @@
 
 # Flow-Guided Plug-and-Play ADMM for Inverse Problems in Imaging
 
-This repository contains the implementation of **PnP-Flow-ADMM**, a method for solving inverse problems using **Plug-and-Play (PnP) priors with flow matching models**, optimized via **ADMM (Alternating Direction Method of Multipliers)**.
+This repository contains the implementation of **PnP-Flow-ADMM**, a flow-guided PnP-ADMM (Alternating Direction Method of Multipliers) method with trajectory correction that keeps iterates aligned with the generative prior, improving reconstruction quality and efficiency in inverse problems.
 
 Our implementation is adapted from the PnP-Flow (ICLR 2025) codebase, which is based on a Forward-Backward Splitting (FBS) formulation.
 
