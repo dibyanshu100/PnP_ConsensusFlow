@@ -132,8 +132,8 @@ Replace `problem` and `method` with the desired options from the lists above.
 
 The key hyperparameters for the `pnp_flow_admm` method are:
 
-* `steps_pnp` — Number of ADMM iterations (default: 200)
-* `rho_admm` — ADMM penalty parameter controlling data–prior balance (default: 1000)
+* `steps_pnp` — Number of ADMM iterations (AFHQ-Cat: 250 and CelebA: 200)
+* `rho_admm` — ADMM penalty parameter controlling data–prior balance (AFHQ-Cat: 500 and CelebA: 1000)
 * `max_cgiter` — Maximum number of conjugate gradient iterations (default: 10)
 * `cg_tol` — Tolerance for the CG solver (default: 1e-5)
 * `save_norms_admm` — Store ADMM residual norms (default: False)
@@ -171,7 +171,7 @@ bash scripts/main_results.sh
 ### Experiment Details
 
 * Random starting batch per run
-* Evaluation over **25 batches**
+* Evaluation over **25 batches**, each batch containing 4 images
 * Runtime and GPU memory recorded
 * Results averaged across batches
 * Same setup across all methods
@@ -181,13 +181,8 @@ bash scripts/main_results.sh
 
 ### Visualization and Analysis
 
-We provide a Jupyter notebook for visualizing results, plotting graphs, and summarizing metrics in tabular form.
-
-To use it:
-
-```bash
-jupyter notebook graphs.ipynb
-```
+We provide the jupyter notebook **graphs.ipynb** for visualizing results, plotting graphs, and summarizing metrics 
+in tabular form.
 
 The notebook can be used to:
 
@@ -205,7 +200,7 @@ Appendix results can be reproduced using `scripts/ablation_results.sh`, with add
 
 ---
 
-## Project Structure
+<!-- ## Project Structure
 
 ```
 ├── config/          # Configuration files
@@ -216,7 +211,7 @@ Appendix results can be reproduced using `scripts/ablation_results.sh`, with add
 ├── main.py          # Main entry point
 ```
 
----
+--- -->
 
 <!-- ## License
 
