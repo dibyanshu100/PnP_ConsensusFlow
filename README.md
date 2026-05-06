@@ -142,7 +142,7 @@ The key hyperparameters for the `pnp_flow_admm` method are:
 
 * `adaptive_noise=True` — **Adaptive projection (recommended)**
 * `adaptive_noise=False`, `deterministic_noise=True` — Deterministic projections
-* `adaptive_noise=False`, `deterministic_noise=False` — Random projections
+* `adaptive_noise=False`, `deterministic_noise=False` — Stochastic projections
 
 ---
 
