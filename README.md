@@ -181,7 +181,7 @@ bash scripts/main_results.sh
 
 ### Visualization and Analysis
 
-We provide the jupyter notebook **graphs.ipynb** for visualizing results, plotting graphs, and summarizing metrics 
+We provide the jupyter notebook `graphs.ipynb` for visualizing results, plotting graphs, and summarizing metrics 
 in tabular form.
 
 The notebook can be used to:
