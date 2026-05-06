@@ -1,5 +1,3 @@
-#!/bin/bash
-# jobs
 RANDOM=42
 
 # nohup bash run_experiments.sh > output.log 2>&1 &
@@ -292,64 +290,58 @@ RANDOM=42
 dataset="afhq_cat"  #"afhq_cat"
 
 # list of problems (no fixed values anymore)
-# problems=(
-#   denoising
-#   inpainting
-#   superresolution
-#   random_inpainting
-#   gaussian_deblurring_FFT
-#   paintbrush_inpainting
-# )
-
 problems=(
   denoising
+  inpainting
 )
+
+
 
 ########################################################################################################################################
 # # important for paper 100 data result
 
-# # methods grouped by config
-# methods_batch4=("pnp_flow_fbs" "pnp_flow_admm" "ot_ode")
-# methods_batch1=("flow_priors" "d_flow")
+# methods grouped by config
+methods_batch4=("pnp_flow_fbs" "pnp_flow_admm" "ot_ode")
+methods_batch1=("flow_priors" "d_flow")
 
-# for problem in "${problems[@]}"; do
-#   # assign random number between 1 and 100
-#   start_batch=$((RANDOM % 10 + 1))
+for problem in "${problems[@]}"; do
+  # assign random number between 1 and 100
+  start_batch=$((RANDOM % 10 + 1))
 
-#   echo "Running $problem with start_batch=$start_batch"
+  echo "Running $problem with start_batch=$start_batch"
 
-#   # methods with batch_size_ip=4
-#   for method in "${methods_batch4[@]}"; do
-#     python main.py --opts \
-#       dataset "$dataset" train False eval True \
-#       problem "$problem" start_batch "$start_batch" \
-#       max_batch 10 batch_size_ip 10 method "$method"      # max_batch 10 batch_size_ip 10 method # max_batch 5 batch_size_ip 4 method "$method"
-#   done
+  # methods with batch_size_ip=4
+  for method in "${methods_batch4[@]}"; do
+    python main.py --opts \
+      dataset "$dataset" train False eval True \
+      problem "$problem" start_batch "$start_batch" \
+      max_batch 1 batch_size_ip 2 method "$method"      # max_batch 10 batch_size_ip 10 method # max_batch 5 batch_size_ip 4 method "$method"
+  done
 
-#   # methods with batch_size_ip=1
-#   for method in "${methods_batch1[@]}"; do
-#     python main.py --opts \
-#       dataset "$dataset" train False eval True \
-#       problem "$problem" start_batch "$start_batch" \
-#       max_batch 50 batch_size_ip 2 method "$method"       # max_batch 50 batch_size_ip 2 method # max_batch 5 batch_size_ip 4 method "$method"
-#   done
-# done
+  # methods with batch_size_ip=1
+  for method in "${methods_batch1[@]}"; do
+    python main.py --opts \
+      dataset "$dataset" train False eval True \
+      problem "$problem" start_batch "$start_batch" \
+      max_batch 1 batch_size_ip 2 method "$method"       # max_batch 50 batch_size_ip 2 method # max_batch 5 batch_size_ip 4 method "$method"
+  done
+done
 
 
 ########################################################################################################################################
 
-# for only single
-method="pnp_flow_admm"   #"pnp_flow_admm"
+# # for only single
+# method="pnp_flow_admm"   #"pnp_flow_admm"
 
-for problem in "${problems[@]}"; do
-  # assign random number between 1 and 10
-  start_batch=$((RANDOM % 10 + 1))
-  echo "Running $problem with start_batch=$start_batch"
-  python main.py --opts \
-    dataset "$dataset" train False eval True \
-    problem "$problem" start_batch "$start_batch" \
-    max_batch 5 batch_size_ip 10 method "$method"
-done
+# for problem in "${problems[@]}"; do
+#   # assign random number between 1 and 10
+#   start_batch=$((RANDOM % 10 + 1))
+#   echo "Running $problem with start_batch=$start_batch"
+#   python main.py --opts \
+#     dataset "$dataset" train False eval True \
+#     problem "$problem" start_batch "$start_batch" \
+#     max_batch 5 batch_size_ip 10 method "$method"
+# done
 
 
 ########################################################################################################################################
