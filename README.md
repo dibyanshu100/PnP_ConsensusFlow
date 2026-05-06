@@ -1,6 +1,6 @@
 ![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)
 
-# Flow-Guided Plug-and-Play ADMM for Inverse Problems in Imaging
+# Plug-and-Play ADMM for Inverse Problems with Flow Matching Denoiser
 
 This repository contains the implementation of **PnP-Flow-ADMM**, a flow-guided PnP-ADMM (Alternating Direction Method of Multipliers) method with trajectory correction that keeps iterates aligned with the generative prior, improving reconstruction quality and efficiency in inverse problems.
 
