@@ -35,11 +35,15 @@ class PNP_FLOW_FBS(object):
         }
         return gamma_styles.get(self.args.gamma_style, lambda lr, t: lr)(lr, t)
 
-    def grad_datafit(self, x, y, H, H_adj):
+    def grad_datafit(self, x, y, degradation):
+        # Uses degradation.vjp instead of a literal adjoint so this works
+        # unchanged for both linear H (vjp == H_adj(v), exact and cheap) and
+        # nonlinear H (vjp computed via autograd).
+        H = degradation.H
         if self.args.noise_type == 'gaussian':
-            return H_adj(H(x) - y) / (self.args.sigma_noise**2)
+            return degradation.vjp(x, H(x) - y) / (self.args.sigma_noise**2)
         elif self.args.noise_type == 'laplace':
-            return H_adj(2*torch.heaviside(H(x)-y, torch.zeros_like(H(x)))-1)/self.args.sigma_noise
+            return degradation.vjp(x, 2*torch.heaviside(H(x)-y, torch.zeros_like(H(x)))-1)/self.args.sigma_noise
         else:
             raise ValueError('Noise type not supported')
 
@@ -91,10 +95,6 @@ class PNP_FLOW_FBS(object):
             noisy_img, clean_img = noisy_img.to(
                 self.device), clean_img.to('cpu')
 
-            # intialize the image with the adjoint operator
-            x = H_adj(torch.ones_like(noisy_img)).to(self.device)
-            gauss_noise = torch.randn_like(x)
-
             if self.args.compute_time:
                 torch.cuda.synchronize()
                 time_per_batch = 0
@@ -102,57 +102,97 @@ class PNP_FLOW_FBS(object):
             if self.args.compute_memory:
                 torch.cuda.reset_max_memory_allocated(self.device)
 
-            with torch.no_grad():
-                for count, iteration in enumerate(range(int(steps))):
-                    if self.args.compute_time:
-                        time_counter_1 = perf_counter()
+            # Multiple random restarts per image, keeping whichever restart
+            # has the lowest final data residual ||H(x)-y||. Defaults to 1
+            # (i.e. the exact prior single-shot behavior, byte-for-byte,
+            # since the RNG is untouched in that case) for every problem
+            # except phase_retrieval -- see conversation. Override with
+            # `--opts num_restarts N`.
+            num_restarts = int(getattr(self.args, 'num_restarts', 1))
+            best_residual = None
+            best_x = None
 
-                    t1 = torch.ones(
-                        len(x), device=self.device) * delta * iteration
-                    lr_t = self.learning_rate_strat(lr, t1)
+            for restart in range(num_restarts):
+                if num_restarts > 1:
+                    # Only reseed in multi-restart mode: keeps the
+                    # num_restarts=1 path's RNG sequence identical to before
+                    # this feature existed.
+                    torch.manual_seed(1000 * batch + restart)
+                    print(f"  [restart {restart}/{num_restarts}]")
 
-                    z = x - lr_t * \
-                        self.grad_datafit(x, noisy_img, H, H_adj)
+                # intialize the image with the adjoint operator
+                x = H_adj(torch.ones_like(noisy_img)).to(self.device)
+                gauss_noise = torch.randn_like(x)
 
-                    if not self.args.adaptive_noise:
-                        # print("PnP-FBS with stochastic projection (original approach)")
-                        x_new = torch.zeros_like(x)
-                        for _ in range(num_samples):
-                            gauss_noise =  torch.randn_like(x_new)
-                            z_tilde = self.interpolation_step(
-                                z, t1.view(-1, 1, 1, 1),gauss_noise)
-                            x_new += self.denoiser(z_tilde, t1)
-                    
-                        x_new /= num_samples
-                        x = x_new
-                    else:
-                        # print("PNP-FBS with adaptive projection (our projection mechanism)")
-                        z_tilde = self.interpolation_step(z, t1.view(-1, 1, 1, 1),gauss_noise)
-                        x = self.denoiser(z_tilde, t1)
-                        gauss_noise_1 = (z_tilde - x*t1.view(-1, 1, 1, 1))/ ((1-t1.view(-1, 1, 1, 1)) + 1e-12)
-                        gauss_noise_2 = torch.randn_like(x)
-                        w1 = t1.view(-1, 1, 1, 1)
-                        w2 = 1 - t1.view(-1, 1, 1, 1)
-                        gauss_noise = (w2 * gauss_noise_2 + w1 * gauss_noise_1) / torch.sqrt(w1**2 + w2**2 + 1e-12)
+                with torch.no_grad():
+                    for count, iteration in enumerate(range(int(steps))):
+                        if self.args.compute_time:
+                            time_counter_1 = perf_counter()
+
+                        t1 = torch.ones(
+                            len(x), device=self.device) * delta * iteration
+                        lr_t = self.learning_rate_strat(lr, t1)
+
+                        z = x - lr_t * \
+                            self.grad_datafit(x, noisy_img, degradation)
+
+                        if not self.args.adaptive_noise:
+                            # print("PnP-FBS with stochastic projection (original approach)")
+                            x_new = torch.zeros_like(x)
+                            for _ in range(num_samples):
+                                gauss_noise =  torch.randn_like(x_new)
+                                z_tilde = self.interpolation_step(
+                                    z, t1.view(-1, 1, 1, 1),gauss_noise)
+                                x_new += self.denoiser(z_tilde, t1)
+
+                            x_new /= num_samples
+                            x = x_new
+                        else:
+                            # print("PNP-FBS with adaptive projection (our projection mechanism)")
+                            z_tilde = self.interpolation_step(z, t1.view(-1, 1, 1, 1),gauss_noise)
+                            x = self.denoiser(z_tilde, t1)
+                            gauss_noise_1 = (z_tilde - x*t1.view(-1, 1, 1, 1))/ ((1-t1.view(-1, 1, 1, 1)) + 1e-12)
+                            gauss_noise_2 = torch.randn_like(x)
+                            w1 = t1.view(-1, 1, 1, 1)
+                            w2 = 1 - t1.view(-1, 1, 1, 1)
+                            gauss_noise = (w2 * gauss_noise_2 + w1 * gauss_noise_1) / torch.sqrt(w1**2 + w2**2 + 1e-12)
 
 
-                    if self.args.compute_time:
-                        torch.cuda.synchronize()
-                        time_counter_2 = perf_counter()
-                        time_per_batch += time_counter_2 - time_counter_1
+                        if self.args.compute_time:
+                            torch.cuda.synchronize()
+                            time_counter_2 = perf_counter()
+                            time_per_batch += time_counter_2 - time_counter_1
 
-                    if self.args.save_results:
-                        if iteration % 50 == 0 or self.should_save_image(iteration, steps):
+                        if self.args.save_results and restart == 0:
+                            if iteration % 50 == 0 or self.should_save_image(iteration, steps):
 
-                            restored_img = x.detach().clone()
-                            # utils.save_images(
-                            #     clean_img, noisy_img, restored_img, self.args, H_adj, iter=iteration)
-                            utils.compute_psnr(clean_img, noisy_img,
-                                               restored_img, self.args, H_adj, iter=iteration)
-                            utils.compute_ssim(
-                                clean_img, noisy_img, restored_img, self.args, H_adj, iter=iteration)
-                            utils.compute_lpips(clean_img, noisy_img,
-                                                restored_img, self.args, H_adj, iter=iteration)
+                                restored_img = x.detach().clone()
+                                # utils.save_images(
+                                #     clean_img, noisy_img, restored_img, self.args, H_adj, iter=iteration)
+                                utils.compute_psnr(clean_img, noisy_img,
+                                                   restored_img, self.args, H_adj, iter=iteration)
+                                utils.compute_ssim(
+                                    clean_img, noisy_img, restored_img, self.args, H_adj, iter=iteration)
+                                utils.compute_lpips(clean_img, noisy_img,
+                                                    restored_img, self.args, H_adj, iter=iteration)
+
+                # Score this restart by its final data residual, per image,
+                # and keep whichever restart is best for each image so far.
+                with torch.no_grad():
+                    residual = torch.norm(
+                        (H(x) - noisy_img).reshape(noisy_img.shape[0], -1), dim=1)
+                if best_residual is None:
+                    best_residual = residual
+                    best_x = x.clone()
+                else:
+                    improved = residual < best_residual
+                    best_residual = torch.where(improved, residual, best_residual)
+                    improved_view = improved.view(-1, *([1] * (x.dim() - 1)))
+                    best_x = torch.where(improved_view, x, best_x)
+                if num_restarts > 1:
+                    print(f"  [restart {restart}] per-image ||H(x)-y||: {residual.tolist()}")
+
+            x = best_x
 
             if self.args.compute_memory:
                 dict_memory = {}

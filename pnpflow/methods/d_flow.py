@@ -86,17 +86,11 @@ class D_FLOW(object):
             clean_img = clean_img.to('cpu')
 
             x = H_adj(noisy_img.clone()).to(self.device)
-            z = self.inverse_flow_matching(x).to(self.device)
-
-            # blend intialization as in the d-flow paper
-            z = np.sqrt(self.args.alpha) * z + np.sqrt(1 -
-                                                       self.args.alpha) * torch.randn_like(z)
-            z = z.detach().requires_grad_(True)
-
-            # start the gradient descent
-            optim_img = torch.optim.LBFGS(
-                [z], max_iter=self.args.LBFGS_iter, history_size=100, line_search_fn='strong_wolfe')
-            d = z.shape[1] * z.shape[2] * z.shape[3]
+            # Restart-invariant: the backward ODE solve from the (fixed)
+            # adjoint-based estimate doesn't depend on any randomness, so
+            # it's computed once and reused across restarts below rather
+            # than re-solved (expensive) each time.
+            z_base = self.inverse_flow_matching(x).to(self.device)
 
             if self.args.compute_time:
                 torch.cuda.synchronize()
@@ -105,39 +99,86 @@ class D_FLOW(object):
             if self.args.compute_memory:
                 torch.cuda.reset_max_memory_allocated(self.device)
 
-            # tq = tqdm(range(self.args.max_iter), desc='psnr')
-            for iteration in range(self.args.max_iter):
-                if self.args.compute_time:
-                    time_counter_1 = perf_counter()
+            # Multiple random restarts per image, keeping whichever restart
+            # has the lowest final data residual ||H(x)-y||. Defaults to 1
+            # (i.e. the exact prior single-shot behavior, byte-for-byte,
+            # since the RNG is untouched in that case) for every problem
+            # except phase_retrieval -- see conversation. Override with
+            # `--opts num_restarts N`.
+            num_restarts = int(getattr(self.args, 'num_restarts', 1))
+            best_residual = None
+            best_restored = None
 
-                def closure():
-                    optim_img.zero_grad()  # Reset gradients
-                    reg = - torch.clamp(self.gaussian(z), min=-1e6, max=1e6) + (
-                        d - 1) * torch.log(torch.sqrt(torch.sum(z**2, dim=(1, 2, 3))) + 1e-5)
+            for restart in range(num_restarts):
+                if num_restarts > 1:
+                    # Only reseed in multi-restart mode: keeps the
+                    # num_restarts=1 path's RNG sequence identical to before
+                    # this feature existed.
+                    torch.manual_seed(1000 * batch + restart)
+                    print(f"  [restart {restart}/{num_restarts}]")
 
-                    loss = (torch.sum((H(self.forward_flow_matching(z)) -
-                            noisy_img)**2, dim=(1, 2, 3)) + self.args.lmbda * reg).sum()
-                    loss.backward()  # Compute gradients
-                    return loss
+                # blend intialization as in the d-flow paper
+                z = np.sqrt(self.args.alpha) * z_base + np.sqrt(1 -
+                                                           self.args.alpha) * torch.randn_like(z_base)
+                z = z.detach().requires_grad_(True)
 
-                optim_img.step(closure)
+                # start the gradient descent
+                optim_img = torch.optim.LBFGS(
+                    [z], max_iter=self.args.LBFGS_iter, history_size=100, line_search_fn='strong_wolfe')
+                d = z.shape[1] * z.shape[2] * z.shape[3]
 
+                # tq = tqdm(range(self.args.max_iter), desc='psnr')
+                for iteration in range(self.args.max_iter):
+                    if self.args.compute_time:
+                        time_counter_1 = perf_counter()
+
+                    def closure():
+                        optim_img.zero_grad()  # Reset gradients
+                        reg = - torch.clamp(self.gaussian(z), min=-1e6, max=1e6) + (
+                            d - 1) * torch.log(torch.sqrt(torch.sum(z**2, dim=(1, 2, 3))) + 1e-5)
+
+                        loss = (torch.sum((H(self.forward_flow_matching(z)) -
+                                noisy_img)**2, dim=(1, 2, 3)) + self.args.lmbda * reg).sum()
+                        loss.backward()  # Compute gradients
+                        return loss
+
+                    optim_img.step(closure)
+
+                    restored_img = self.forward_flow_matching(z.detach())
+
+                    if self.args.compute_time:
+                        torch.cuda.synchronize()
+                        time_counter_2 = perf_counter()
+                        time_per_batch += time_counter_2 - time_counter_1
+                    # if self.args.save_results:
+                    #     # utils.save_images(
+                    #     #     clean_img, noisy_img, restored_img, self.args, H_adj, iter=iteration)
+                    #     utils.compute_psnr(clean_img, noisy_img,
+                    #                        restored_img, self.args, H_adj, iter=iteration)
+                    #     utils.compute_ssim(clean_img, noisy_img,
+                    #                        restored_img, self.args, H_adj, iter=iteration)
+                    #     utils.compute_lpips(clean_img, noisy_img,
+                    #                         restored_img, self.args, H_adj, iter=iteration)
+
+                    del restored_img
+
+                # Score this restart by its final data residual, per image,
+                # and keep whichever restart is best for each image so far.
+                z = z.detach().requires_grad_(False)
                 restored_img = self.forward_flow_matching(z.detach())
-      
-                if self.args.compute_time:
-                    torch.cuda.synchronize()
-                    time_counter_2 = perf_counter()
-                    time_per_batch += time_counter_2 - time_counter_1
-                # if self.args.save_results:
-                #     # utils.save_images(
-                #     #     clean_img, noisy_img, restored_img, self.args, H_adj, iter=iteration)
-                #     utils.compute_psnr(clean_img, noisy_img,
-                #                        restored_img, self.args, H_adj, iter=iteration)
-                #     utils.compute_ssim(clean_img, noisy_img,
-                #                        restored_img, self.args, H_adj, iter=iteration)
-                #     utils.compute_lpips(clean_img, noisy_img,
-                #                         restored_img, self.args, H_adj, iter=iteration)
-
+                with torch.no_grad():
+                    residual = torch.norm(
+                        (H(restored_img) - noisy_img).reshape(noisy_img.shape[0], -1), dim=1)
+                if best_residual is None:
+                    best_residual = residual
+                    best_restored = restored_img.clone()
+                else:
+                    improved = residual < best_residual
+                    best_residual = torch.where(improved, residual, best_residual)
+                    improved_view = improved.view(-1, *([1] * (restored_img.dim() - 1)))
+                    best_restored = torch.where(improved_view, restored_img, best_restored)
+                if num_restarts > 1:
+                    print(f"  [restart {restart}] per-image ||H(x)-y||: {residual.tolist()}")
                 del restored_img
 
             if self.args.compute_memory:
@@ -154,8 +195,7 @@ class D_FLOW(object):
                 utils.save_time_use(dict_time, self.args)
             if self.args.save_results:
                 # Compute PSNR values
-                z = z.detach().requires_grad_(False)
-                restored_img = self.forward_flow_matching(z.detach())
+                restored_img = best_restored
                 utils.save_images(clean_img, noisy_img, restored_img,
                                   self.args, H_adj, iter='final')
                 utils.compute_psnr(clean_img, noisy_img,

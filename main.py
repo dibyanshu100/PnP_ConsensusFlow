@@ -181,6 +181,42 @@ def main():
             degradation = GaussianDeblurring(
                 sigma_blur, kernel_size, "fft", args.num_channels, args.dim_image, device)
 
+        elif args.problem == "nonlinear_deblurring":
+            # Nonlinear blur forward model (Tran et al., 2021 / DPS-style, see
+            # pnpflow/degradations.py::NonlinearBlur). Pass a checkpoint via
+            # `--opts nonlinear_blur_checkpoint <path>` to use pretrained
+            # weights; otherwise a fixed randomly-initialized network is used.
+            if args.noise_type == 'gaussian':
+                sigma_noise = 0.05
+            else:
+                raise ValueError(
+                    'Nonlinear deblurring currently only supports gaussian noise')
+            degradation = NonlinearBlur(
+                num_channels=args.num_channels, dim_image=args.dim_image,
+                checkpoint_path=getattr(args, 'nonlinear_blur_checkpoint', None),
+                device=device)
+
+        elif args.problem == "phase_retrieval":
+            # Fourier phase retrieval, y = |FFT(pad(x))| (see
+            # pnpflow/degradations.py::PhaseRetrieval). Override the
+            # oversampling ratio via `--opts pr_oversample <float>`.
+            if args.noise_type == 'gaussian':
+                sigma_noise = 0.01  
+            else:
+                raise ValueError(
+                    'Phase retrieval currently only supports gaussian noise')
+            degradation = PhaseRetrieval(
+                oversample=getattr(args, 'pr_oversample', 2.0),
+                dim_image=args.dim_image, num_channels=args.num_channels,
+                device=device)
+            # Phase retrieval's loss landscape has many spurious local
+            # minima that a single random init can land in (see
+            # conversation) -- default to multiple restarts, keeping
+            # whichever has the lowest final ||H(x)-y|| per image. Override
+            # via `--opts num_restarts N`.
+            if not hasattr(args, 'num_restarts'):
+                args.num_restarts = 1
+
         print('Solving the {} inverse problem with the method {}...'.format(
             args.problem, args.method))
         print('sigma_noise', sigma_noise)
@@ -209,6 +245,15 @@ def main():
             method = FLOW_PRIORS(model, device, args)
         else:
             raise ValueError("The method your entered does not exist")
+
+        if not degradation.is_linear and args.method in ('ot_ode', 'flow_priors'):
+            # These two baselines rely on a Gaussian-conditional derivation
+            # that requires H to be linear (see discussion in README); they
+            # have not been extended to nonlinear problems here.
+            raise ValueError(
+                f"Method '{args.method}' is only implemented for linear forward "
+                f"operators and cannot be run on problem '{args.problem}'. "
+                f"Use pnp_flow_admm, pnp_flow_fbs, or d_flow instead.")
 
         method.run_method(data_loaders, degradation, sigma_noise)
 

@@ -33,21 +33,61 @@ class PNP_FLOW_ADMM(object):
         return x
     
     
-    def admm_x_update(self, x_init, z, u, y, H, H_adj, rho, sigma_noise, max_cgiter=50, cg_tol=1e-6):
+    def admm_x_update(self, x_init, z, u, y, degradation, rho, sigma_noise, max_cgiter=50, cg_tol=1e-6):
         """
-        Solve:
+        For linear H, solves in closed form via CG:
             (1/sigma^2 H^T H + rho I)x = 1/sigma^2 H^T y + rho (z-u)
-        using conjugate gradient
+
+        For nonlinear H there is no such closed form, so instead we take a few
+        proximal-gradient steps on the (still convex-in-the-quadratic-part)
+        x-subproblem
+            1/(2 sigma^2) ||H(x)-y||^2 + rho/2 ||x-(z-u)||^2
+        using degradation.vjp for the data-fidelity gradient. The step size
+        1/rho is safe because the proximal term's curvature (rho) dominates
+        near the ADMM fixed point, where rho is typically large relative to
+        1/sigma^2.
         """
+        H = degradation.H
         sigma2_inv = 1.0 / (sigma_noise ** 2)
 
-        def A(x):
-            return sigma2_inv * H_adj(H(x)) + rho * x
+        if degradation.is_linear:
+            H_adj = degradation.H_adj
 
-        b = sigma2_inv * H_adj(y) + rho * (z - u)
+            def A(x):
+                return sigma2_inv * H_adj(H(x)) + rho * x
 
-        x = self.conjugate_gradient(A, b, x_init, max_iter=max_cgiter, tol=cg_tol)
-        return x
+            b = sigma2_inv * H_adj(y) + rho * (z - u)
+
+            x = self.conjugate_gradient(A, b, x_init, max_iter=max_cgiter, tol=cg_tol)
+            return x
+        else:
+            # Fixed-size steps are unsafe here: the data term's curvature
+            # scales with 1/sigma^2 (which can dwarf rho), so a step size
+            # that is safe for one (rho, sigma) pair can diverge for another.
+            # Use gradient steps with backtracking (Armijo) line search
+            # instead, which needs no Lipschitz estimate of H.
+            x = x_init.clone()
+            target = z - u
+
+            def obj(xv):
+                return sigma2_inv * 0.5 * torch.sum((H(xv) - y) ** 2) \
+                    + rho * 0.5 * torch.sum((xv - target) ** 2)
+
+            gd_steps = int(getattr(self.args, 'admm_gd_steps', 10))
+            lr = float(getattr(self.args, 'admm_gd_lr_init', 1.0 / rho))
+            for _ in range(gd_steps):
+                grad = sigma2_inv * degradation.vjp(x, H(x) - y) + rho * (x - target)
+                grad_norm_sq = torch.sum(grad ** 2)
+                f0 = obj(x)
+                step = lr
+                for _ in range(20):
+                    x_try = x - step * grad
+                    if obj(x_try) <= f0 - 0.5 * step * grad_norm_sq or step < 1e-8:
+                        break
+                    step *= 0.5
+                x = x_try
+                lr = min(step * 2, 1.0 / rho)  # warm-start next iter, capped
+            return x
 
     def model_forward(self, x, t):
         if self.args.model == "ot":
@@ -112,6 +152,15 @@ class PNP_FLOW_ADMM(object):
         max_cgiter = int(self.args.max_cgiter)
         cg_tol = float(self.args.cg_tol)
 
+        # Multiple random restarts per image, keeping whichever restart has
+        # the lowest final data residual ||H(x)-y||. Defaults to 1 (i.e. the
+        # exact prior single-shot behavior, byte-for-byte, since the RNG is
+        # untouched in that case) for every problem except phase_retrieval,
+        # whose loss landscape has many spurious local minima that a single
+        # random init can land in -- see conversation. Override with
+        # `--opts num_restarts N`.
+        num_restarts = int(getattr(self.args, 'num_restarts', 1))
+
         loader = iter(test_loader)
         # skip first N batches
         for _ in range(self.args.start_batch):
@@ -131,106 +180,136 @@ class PNP_FLOW_ADMM(object):
             # Keep clean_img on CPU for metrics if your utils expect that
             noisy_img, clean_img_cpu = noisy_img.to(self.device), clean_img.to('cpu')
 
-            # ADMM initialization
-            x = torch.randn(clean_img.shape, device=self.device)
-            z = x.clone()
-            u = torch.zeros_like(x)
-            gauss_noise = x.clone()
-
-            # Optional norm tracking
-            if self.args.save_norms_admm:
-                u_norm_list = []
-                res_norm_list = []
-                dual_res_list = []
-
             if self.args.compute_time:
                 torch.cuda.synchronize()
                 time_per_batch = 0
 
             if self.args.compute_memory:
                 torch.cuda.reset_max_memory_allocated(self.device)
-            
-            with torch.no_grad():
-                for iteration in range(int(steps)):
-                    if self.args.compute_time:
-                        time_counter_1 = perf_counter()
 
-                    # t1 = torch.ones(len(x), device=self.device) * (delta * iteration)
-                    t_linear = delta * iteration  # k/N, in [0,1)
-                    gamma = float(self.args.t_schedule_gamma)
-                    t_val = t_linear ** gamma
-                    t1 = torch.ones(len(x), device=self.device) * t_val
-                    
-                    t_view = t1.view(-1, 1, 1, 1)
+            best_residual = None
+            best_z = None
 
-                    # Save previous values for diagnostics
-                    z_prev = z.clone()
-                    u_prev = u.clone()
+            for restart in range(num_restarts):
+                if num_restarts > 1:
+                    # Only reseed in multi-restart mode: this keeps the
+                    # num_restarts=1 path's RNG sequence (and therefore its
+                    # numerical results) identical to before this feature
+                    # existed -- see this method's docstring note above.
+                    torch.manual_seed(1000 * batch + restart)
+                    print(f"  [restart {restart}/{num_restarts}]")
 
-                    # x-update: data-consistency step
-                    x = self.admm_x_update(
-                        x_init=x,
-                        z=z,
-                        u=u,
-                        y=noisy_img,
-                        H=H,
-                        H_adj=H_adj,
-                        rho=rho,
-                        sigma_noise=sigma_noise,
-                        max_cgiter=max_cgiter,
-                        cg_tol=cg_tol
-                    )
+                # ADMM initialization
+                x = torch.randn(clean_img.shape, device=self.device)
+                z = x.clone()
+                u = torch.zeros_like(x)
+                gauss_noise = x.clone()
 
-                    # z-update: flow prior / denoiser step
-                    z_input = x + u
-                    z_tilde = self.projection_step(z_input, t_view, gauss_noise)
-                    z = self.denoiser(z_tilde, t1)
-                    gauss_noise_1 = (z_tilde - z*t_view)/ ((1-t_view) + 1e-12)
-                    gauss_noise_2 = torch.randn_like(x)
-                    w1 = t_view
-                    w2 = 1 - t_view
+                # Optional norm tracking (restart 0 only, to keep the
+                # diagnostics plot/file readable when num_restarts > 1)
+                if self.args.save_norms_admm and restart == 0:
+                    u_norm_list = []
+                    res_norm_list = []
+                    dual_res_list = []
 
-                    if self.args.adaptive_noise:
-                        # print("PnP-ADMM with adaptive projection")
-                        gauss_noise = (w2 * gauss_noise_2 + w1 * gauss_noise_1) / torch.sqrt(w1**2 + w2**2 + 1e-12) 
-                    else:
-                        if self.args.deterministic_noise:
-                            # print("PnP-ADMM with deterministic projection")
-                            gauss_noise = gauss_noise_1
+                with torch.no_grad():
+                    for iteration in range(int(steps)):
+                        if self.args.compute_time:
+                            time_counter_1 = perf_counter()
+
+                        # t1 = torch.ones(len(x), device=self.device) * (delta * iteration)
+                        t_linear = delta * iteration  # k/N, in [0,1)
+                        gamma = float(self.args.t_schedule_gamma)
+                        t_val = t_linear ** gamma
+                        t1 = torch.ones(len(x), device=self.device) * t_val
+
+                        t_view = t1.view(-1, 1, 1, 1)
+
+                        # Save previous values for diagnostics
+                        z_prev = z.clone()
+                        u_prev = u.clone()
+
+                        # x-update: data-consistency step
+                        x = self.admm_x_update(
+                            x_init=x,
+                            z=z,
+                            u=u,
+                            y=noisy_img,
+                            degradation=degradation,
+                            rho=rho,
+                            sigma_noise=sigma_noise,
+                            max_cgiter=max_cgiter,
+                            cg_tol=cg_tol
+                        )
+
+                        # z-update: flow prior / denoiser step
+                        z_input = x + u
+                        z_tilde = self.projection_step(z_input, t_view, gauss_noise)
+                        z = self.denoiser(z_tilde, t1)
+                        gauss_noise_1 = (z_tilde - z*t_view)/ ((1-t_view) + 1e-12)
+                        gauss_noise_2 = torch.randn_like(x)
+                        w1 = t_view
+                        w2 = 1 - t_view
+
+                        if self.args.adaptive_noise:
+                            # print("PnP-ADMM with adaptive projection")
+                            gauss_noise = (w2 * gauss_noise_2 + w1 * gauss_noise_1) / torch.sqrt(w1**2 + w2**2 + 1e-12) 
                         else:
-                            # print("PnP-ADMM with stochastic projection")
-                            gauss_noise = gauss_noise_2
-                                        
-                    # u-update: dual variable
-                    u = u + (x-z) 
-                    
-                    # Store norms
-                    if self.args.save_norms_admm:
-                        primal_res = torch.norm(x - z)
-                        dual_res = rho * torch.norm(z - z_prev)
-                        u_inc = torch.norm(u - u_prev)
-                        res_norm_list.append(primal_res.item())
-                        dual_res_list.append(dual_res.item())
-                        u_norm_list.append(u_inc.item())
-                        print(f"Iter {iteration}: ||x-z||={primal_res.item():.4f}, rho||z-z_precv|| = {dual_res.item():.4f}), ||u-u_prev|| = {u_inc.item():.4f}")
+                            if self.args.deterministic_noise:
+                                # print("PnP-ADMM with deterministic projection")
+                                gauss_noise = gauss_noise_1
+                            else:
+                                # print("PnP-ADMM with stochastic projection")
+                                gauss_noise = gauss_noise_2
 
-                    if self.args.compute_time:
-                        torch.cuda.synchronize()
-                        time_counter_2 = perf_counter()
-                        time_per_batch += time_counter_2 - time_counter_1
+                        # u-update: dual variable
+                        u = u + (x-z) 
 
-                    if self.args.save_results:
-                        if iteration % 50 == 0 or self.should_save_image(iteration, steps):
-                            restored_img = z.detach().clone()
-                            utils.compute_psnr(
-                                clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration
-                            )
-                            utils.compute_ssim(
-                                clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration
-                            )
-                            utils.compute_lpips(
-                                clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration
-                            )
+                        # Store norms
+                        if self.args.save_norms_admm and restart == 0:
+                            primal_res = torch.norm(x - z)
+                            dual_res = rho * torch.norm(z - z_prev)
+                            u_inc = torch.norm(u - u_prev)
+                            res_norm_list.append(primal_res.item())
+                            dual_res_list.append(dual_res.item())
+                            u_norm_list.append(u_inc.item())
+                            print(f"Iter {iteration}: ||x-z||={primal_res.item():.4f}, rho||z-z_precv|| = {dual_res.item():.4f}), ||u-u_prev|| = {u_inc.item():.4f}")
+
+                        if self.args.compute_time:
+                            torch.cuda.synchronize()
+                            time_counter_2 = perf_counter()
+                            time_per_batch += time_counter_2 - time_counter_1
+
+                        if self.args.save_results and restart == 0:
+                            if iteration % 50 == 0 or self.should_save_image(iteration, steps):
+                                restored_img = z.detach().clone()
+                                utils.compute_psnr(
+                                    clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration
+                                )
+                                utils.compute_ssim(
+                                    clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration
+                                )
+                                utils.compute_lpips(
+                                    clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration
+                                )
+
+                # Score this restart by its final data residual, per image,
+                # and keep whichever restart is best for each image so far.
+                with torch.no_grad():
+                    residual = torch.norm(
+                        (H(z) - noisy_img).reshape(noisy_img.shape[0], -1), dim=1)
+                if best_residual is None:
+                    best_residual = residual
+                    best_z = z.clone()
+                else:
+                    improved = residual < best_residual
+                    best_residual = torch.where(improved, residual, best_residual)
+                    improved_view = improved.view(-1, *([1] * (z.dim() - 1)))
+                    best_z = torch.where(improved_view, z, best_z)
+                if num_restarts > 1:
+                    print(f"  [restart {restart}] per-image ||H(x)-y||: {residual.tolist()}")
+
+            z = best_z
 
             if  self.args.save_norms_admm:
                 self.save_norms(res_norm_list, dual_res_list, u_norm_list, batch)

@@ -149,56 +149,71 @@ class Superresolution(Degradation):
             return torch.real(torch.fft.ifft2(torch.fft.fft2(x_) * torch.conj(torch.fft.fft2(self.filter))))
 
 
-class _NonlinearBlurNet(torch.nn.Module):
-    """Small conv encoder-decoder producing a spatially-varying, nonlinear blur.
+# Architecture hyperparameters for the "GOPRO wVAE" checkpoint, copied from
+# BKSE's own options/generate_blur/default.yml (the exact config DPS's
+# configs/nonlinear_deblur_config.yaml points at). Only used to build the
+# KernelWizard module; unrelated to anything in the rest of this codebase.
+_KERNEL_WIZARD_OPT = {
+    "input_nc": 3,
+    "nf": 64,
+    "front_RBs": 10,
+    "back_RBs": 20,
+    "N_frames": 1,
+    "kernel_dim": 512,
+    "use_vae": True,
+    "KernelExtractor": {
+        "norm": "none",
+        "use_sharp": True,
+        "n_blocks": 4,
+        "padding_type": "reflect",
+        "use_dropout": False,
+    },
+    "Adapter": {
+        "norm": "none",
+        "use_dropout": False,
+    },
+}
 
-    This plays the role of the pretrained network used in Tran et al. (2021)
-    ("Explore Image Deblurring via Encoded Blur Kernel Space") and adopted as
-    the nonlinear-deblurring forward model in DPS (Chung et al., 2022): a
-    smoothing operation modulated by a random "kernel code" and passed through
-    a saturating nonlinearity, so H is genuinely nonlinear (not a fixed
-    convolution) and depends on x through more than a linear filter.
 
-    If the official pretrained weights are available, load them into this
-    module via `NonlinearBlur(checkpoint_path=...)`; the architecture below is
-    otherwise a compact, from-scratch stand-in (fixed/frozen, untrained beyond
-    random init) so the operator is still well-defined and differentiable.
+def _load_kernel_wizard():
+    """Imports the vendored BKSE KernelWizard class.
+
+    KernelWizard's own source uses absolute imports (`import models.arch_util`),
+    so the vendored `bkse/` directory -- not its parent -- must be on
+    sys.path, exactly as required when using the official BKSE repo directly.
     """
-
-    def __init__(self, num_channels=3, code_channels=8, hidden=32):
-        super().__init__()
-        self.code_channels = code_channels
-        self.enc = torch.nn.Sequential(
-            torch.nn.Conv2d(num_channels + code_channels, hidden, 3, padding=1),
-            torch.nn.ReLU(inplace=True),
-            torch.nn.Conv2d(hidden, hidden, 3, padding=1),
-            torch.nn.ReLU(inplace=True),
-        )
-        self.dec = torch.nn.Sequential(
-            torch.nn.Conv2d(hidden, hidden, 3, padding=1),
-            torch.nn.ReLU(inplace=True),
-            torch.nn.Conv2d(hidden, num_channels, 3, padding=1),
-        )
-
-    def forward(self, x, code):
-        code_up = F.interpolate(code, size=x.shape[-2:], mode='nearest')
-        h = self.enc(torch.cat([x, code_up], dim=1))
-        residual = self.dec(h)
-        blurred = F.avg_pool2d(x, 5, stride=1, padding=2)
-        # Saturating nonlinearity (akin to sensor tone-mapping) is what makes
-        # this operator genuinely nonlinear, on top of the spatially-varying
-        # residual predicted from the image itself.
-        return torch.tanh(blurred + 0.1 * residual)
+    import os
+    import sys
+    bkse_root = os.path.join(os.path.dirname(__file__), "nonlinear_ops", "bkse")
+    if bkse_root not in sys.path:
+        sys.path.insert(0, bkse_root)
+    from models.kernel_encoding.kernel_wizard import KernelWizard
+    return KernelWizard
 
 
 class NonlinearBlur(Degradation):
-    """Nonlinear blur forward operator (Tran et al., 2021 / DPS-style).
+    """Nonlinear blur forward operator: KernelWizard's non-blind reblurring
+    path (Tran et al., 2021, "Explore Image Deblurring via Encoded Blur
+    Kernel Space", CVPR'21), used as-is by DPS (Chung et al., 2022) for their
+    nonlinear-deblurring baseline.
 
-    Unlike GaussianDeblurring, H here is not a fixed convolution: it is a
-    learned, spatially-varying, nonlinear function of x, so there is no exact
-    adjoint. H_adj is therefore only a display/initialization stand-in
-    (identity, since input and output live in the same pixel space); actual
-    gradients of the data-fidelity term must go through `vjp` instead.
+    H(x) = KernelWizard.adaptKernel(x, kernel) for a kernel code sampled once
+    at construction time (kept fixed thereafter, so H is a deterministic
+    function of x -- the official DPS operator instead resamples the kernel
+    on every call, which is fine for their single-shot diffusion guidance but
+    would make H a moving target for the iterative solvers in this codebase).
+
+    Requires the official pretrained weights ("GOPRO_wVAE.pth" from BKSE's
+    model zoo, https://github.com/VinAIResearch/blur-kernel-space-exploring)
+    passed via `checkpoint_path`; without it, this falls back to a randomly-
+    initialized (frozen) KernelWizard so the pipeline is still runnable
+    end-to-end, but a loud warning is printed since the resulting blur is not
+    meaningful for anything you'd report.
+
+    H is genuinely nonlinear (not a fixed convolution), so there is no exact
+    adjoint. H_adj is only a display/initialization stand-in (identity, since
+    input and output live in the same pixel space); actual gradients of the
+    data-fidelity term go through `vjp` instead.
     """
 
     is_linear = False
@@ -206,29 +221,58 @@ class NonlinearBlur(Degradation):
     def __init__(self, num_channels=3, dim_image=128, checkpoint_path=None, device="cuda"):
         super().__init__()
         self.device = device
-        self.net = _NonlinearBlurNet(num_channels).to(device)
+        KernelWizard = _load_kernel_wizard()
+        opt = dict(_KERNEL_WIZARD_OPT)
+        opt["input_nc"] = num_channels
+        self.net = KernelWizard(opt).to(device)
         self.net.eval()
+
+        if checkpoint_path is not None:
+            state = torch.load(checkpoint_path, map_location=device)
+            state = state.get('state_dict', state)
+            # strict=True on purpose: with the real architecture in place, a
+            # key mismatch means something is actually wrong (wrong
+            # checkpoint, wrong opt dict) and should fail loudly rather than
+            # silently falling back to partially-random weights.
+            self.net.load_state_dict(state, strict=True)
+            print(f"[NonlinearBlur] loaded official KernelWizard weights from {checkpoint_path}")
+        else:
+            print("[NonlinearBlur] WARNING: no checkpoint_path given -- running "
+                  "KernelWizard with random weights. This is only useful for "
+                  "smoke-testing the pipeline; pass the official GOPRO_wVAE.pth "
+                  "(see BKSE's model zoo) for any result you'd actually report.")
+
         for p in self.net.parameters():
             p.requires_grad_(False)
-        if checkpoint_path is not None:
-            try:
-                state = torch.load(checkpoint_path, map_location=device)
-                state = state.get('state_dict', state)
-                missing = self.net.load_state_dict(state, strict=False)
-                print(f"[NonlinearBlur] loaded checkpoint from {checkpoint_path} ({missing})")
-            except Exception as e:
-                print(f"[NonlinearBlur] could not load checkpoint at {checkpoint_path} "
-                      f"({e}); using randomly-initialized (frozen) weights instead.")
-        # Fixed kernel code so that H is a deterministic function of x alone
-        # (reproducible across runs / methods being compared).
+
+        # Fixed kernel code (same scale as DPS's own random_kernel) so that H
+        # is a deterministic function of x -- see class docstring. Its
+        # spatial size must match KernelAdapter's innermost feature map: the
+        # feature extractor downsamples by 4x, then the 5-level UNet in
+        # KernelAdapter downsamples by a further 32x, i.e. total 128x. DPS
+        # hardcodes this to 2x2 because they only ever use 256x256 images
+        # (256/128=2); it must be recomputed for other image sizes (e.g. our
+        # 128x128 celeba config gives 1x1) or KernelAdapter's internal
+        # torch.cat of the kernel with the downsampled features shape-mismatches.
+        kernel_spatial = max(dim_image // 128, 1)
+        if dim_image % 128 != 0:
+            raise ValueError(
+                f"NonlinearBlur (KernelWizard) requires dim_image to be a "
+                f"multiple of 128 (got {dim_image}); the feature extractor "
+                f"and KernelAdapter together downsample by exactly 128x.")
         gen = torch.Generator(device=device).manual_seed(0)
-        code_size = max(dim_image // 8, 1)
-        self.code = torch.randn(1, 8, code_size, code_size, device=device, generator=gen)
+        self.kernel = torch.randn(1, opt["kernel_dim"], kernel_spatial, kernel_spatial,
+                                   device=device, generator=gen) * 1.2
 
     def H(self, x):
         x = x.to(self.device)
-        code = self.code.repeat(x.shape[0], 1, 1, 1)
-        return self.net(x, code)
+        kernel = self.kernel.expand(x.shape[0], -1, -1, -1)
+        # KernelWizard was trained on images in [0, 1]; this codebase uses
+        # [-1, 1] (see pnpflow/dataloaders.py's Normalize(0.5, 0.5)), so
+        # convert in and out, matching DPS's own operator exactly.
+        x01 = (x + 1.0) / 2.0
+        out01 = self.net.adaptKernel(x01, kernel=kernel)
+        return (out01 * 2.0 - 1.0).clamp(-1, 1)
 
     def H_adj(self, x):
         # Display/initialization stand-in only -- see class docstring.
@@ -241,6 +285,13 @@ class PhaseRetrieval(Degradation):
     the standard convention in the phase-retrieval literature (commonly a
     factor of 2) so that the magnitude-only measurement is informative enough
     for the (still highly non-convex) problem to be solvable.
+
+    Uses an orthonormal FFT (norm='ortho'), matching DPS's own operator
+    (their fft2_m -> fft2c_new(..., norm="ortho")) -- this is not optional:
+    the unnormalized FFT scales |FFT(x)| up by the padded pixel count (tens
+    of thousands for typical image sizes), which silently breaks every
+    sigma_noise/rho/step-size default in this codebase, all of which assume
+    H(x) and y live on the same [-1, 1] scale as the image.
 
     H is non-differentiable-invertible and has no adjoint. H_adj is only a
     display/initialization stand-in: it applies a random phase to the
@@ -260,12 +311,12 @@ class PhaseRetrieval(Degradation):
     def H(self, x):
         x = x.to(self.device)
         x_pad = F.pad(x, [self.pad, self.pad, self.pad, self.pad])
-        return torch.abs(torch.fft.fft2(x_pad))
+        return torch.abs(torch.fft.fft2(x_pad, norm='ortho'))
 
     def H_adj(self, y):
         # Display/initialization stand-in only -- see class docstring.
         gen = torch.Generator(device=y.device).manual_seed(0)
         phase = torch.exp(1j * torch.rand(y.shape, device=y.device, generator=gen) * 2 * math.pi)
-        x_pad = torch.real(torch.fft.ifft2(y.to(torch.complex64) * phase))
+        x_pad = torch.real(torch.fft.ifft2(y.to(torch.complex64) * phase, norm='ortho'))
         c = self.pad
         return x_pad[..., c:c + self.dim_image, c:c + self.dim_image]
