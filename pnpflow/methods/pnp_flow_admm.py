@@ -125,7 +125,7 @@ class PNP_FLOW_ADMM(object):
             clean_img = clean_img.to(self.device)
 
             noisy_img = H(clean_img.clone())
-            torch.manual_seed(batch)
+            # torch.manual_seed(batch)
             noisy_img = noisy_img + torch.randn_like(noisy_img) * sigma_noise
 
             # Keep clean_img on CPU for metrics if your utils expect that
@@ -155,7 +155,12 @@ class PNP_FLOW_ADMM(object):
                     if self.args.compute_time:
                         time_counter_1 = perf_counter()
 
-                    t1 = torch.ones(len(x), device=self.device) * (delta * iteration)
+                    # t1 = torch.ones(len(x), device=self.device) * (delta * iteration)
+                    t_linear = delta * iteration  # k/N, in [0,1)
+                    gamma = float(self.args.t_schedule_gamma)
+                    t_val = t_linear ** gamma
+                    t1 = torch.ones(len(x), device=self.device) * t_val
+                    
                     t_view = t1.view(-1, 1, 1, 1)
 
                     # Save previous values for diagnostics

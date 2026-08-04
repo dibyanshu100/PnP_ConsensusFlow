@@ -6,5 +6,6 @@ METHOD:
     save_norms_admm: True
     adaptive_noise: True
     deterministic_noise: False  # Only applicable when adaptive_noise is False
+    t_schedule_gamma: 1.0
     
     

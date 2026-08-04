@@ -324,6 +324,247 @@ def extract_basic_metrics(root_dir: Path, out_xlsx: str = "metrics_summary.xlsx"
     return result
 
 
+def extract_basic_metrics_variable_params(
+    root_dir: Path,
+    out_xlsx: str = "metrics.xlsx"
+) -> pd.DataFrame:
+
+    metric_files = {
+        "psnr": "final_psnr.txt",
+        "ssim": "final_ssim.txt",
+        "lpips": "final_lpips.txt",
+    }
+
+    metric_columns = {
+        "psnr": ["psnr_rec", "psnr_noisy"],
+        "ssim": ["ssim_rec", "ssim_noisy"],
+        "lpips": ["lpips_rec", "lpips_noisy"],
+    }
+
+    all_results = []
+
+    # Find directories containing final metric files
+    run_dirs = sorted({p.parent for p in root_dir.rglob("final_*.txt")})
+
+    for run_dir in run_dirs:
+        rel = run_dir.relative_to(root_dir).parts
+
+        if len(rel) < 2:
+            continue
+
+        merged = None
+
+        for metric_name, filename in metric_files.items():
+            file_path = run_dir / filename
+
+            if not file_path.exists():
+                continue
+
+            try:
+                df = pd.read_csv(file_path, sep=r"\s+", engine="python")
+            except Exception as e:
+                print(f"Could not read {file_path}: {e}")
+                continue
+
+            if df.empty:
+                continue
+
+            available_metrics = [
+                col for col in metric_columns[metric_name]
+                if col in df.columns
+            ]
+
+            # All remaining columns describe the experiment configuration
+            parameter_cols = [
+                col for col in df.columns
+                if col not in metric_columns[metric_name]
+            ]
+
+            df = df[parameter_cols + available_metrics]
+
+            if merged is None:
+                merged = df
+            else:
+                common_params = [
+                    col for col in parameter_cols
+                    if col in merged.columns
+                ]
+
+                if common_params:
+                    merged = pd.merge(
+                        merged,
+                        df,
+                        on=common_params,
+                        how="outer"
+                    )
+                else:
+                    # Fallback: assume corresponding rows represent same runs
+                    merged = pd.concat(
+                        [
+                            merged.reset_index(drop=True),
+                            df[available_metrics].reset_index(drop=True),
+                        ],
+                        axis=1,
+                    )
+
+        if merged is None or merged.empty:
+            continue
+
+        merged.insert(0, "method", rel[1])
+        merged.insert(0, "task", rel[0])
+
+        all_results.append(merged)
+
+    if not all_results:
+        print(f"No metric files found under: {root_dir}")
+        return pd.DataFrame()
+
+    result = pd.concat(all_results, ignore_index=True)
+
+    preferred_order = [
+        "task",
+        "method",
+        "steps_pnp",
+        "rho_admm",
+        "max_cgiter",
+        "cg_tol",
+        "save_norms_admm",
+        "adaptive_noise",
+        "deterministic_noise",
+        "t_schedule_gamma",
+        "psnr_rec",
+        "psnr_noisy",
+        "ssim_rec",
+        "ssim_noisy",
+        "lpips_rec",
+        "lpips_noisy",
+    ]
+
+    ordered = [col for col in preferred_order if col in result.columns]
+    remaining = [col for col in result.columns if col not in ordered]
+    result = result[ordered + remaining]
+
+    sort_cols = [
+        col for col in [
+            "task",
+            "method",
+            "steps_pnp",
+            "rho_admm",
+            "t_schedule_gamma",
+        ]
+        if col in result.columns
+    ]
+
+    if sort_cols:
+        result = result.sort_values(sort_cols).reset_index(drop=True)
+
+    result.to_excel(out_xlsx, index=False)
+
+    print(f"Found {len(result)} experiment configurations.")
+    print(f"Saved results to: {out_xlsx}")
+
+    return result
+
+#####################################################################################################
+
+
+def extract_rebuttal_metrics(
+    root_dir: Path,
+    out_xlsx: str = "rebuttal_multiseed_results.xlsx"
+) -> pd.DataFrame:
+
+    metric_files = {
+        "psnr": ("final_psnr.txt", "psnr_rec"),
+        "ssim": ("final_ssim.txt", "ssim_rec"),
+        "lpips": ("final_lpips.txt", "lpips_rec"),
+    }
+
+    results = []
+
+    run_dirs = sorted({
+        p.parent
+        for p in root_dir.rglob("final_*.txt")
+        if p.parent.name == "test"
+    })
+
+    for run_dir in run_dirs:
+        rel = run_dir.relative_to(root_dir).parts
+
+        if len(rel) < 3:
+            continue
+
+        task = rel[-3]
+        method = rel[-2]
+
+        summary = {
+            "task": task,
+            "method": method,
+        }
+
+        n_runs = None
+
+        for metric, (filename, column) in metric_files.items():
+            file_path = run_dir / filename
+
+            if not file_path.exists():
+                summary[f"{metric}_mean"] = None
+                summary[f"{metric}_std"] = None
+                continue
+
+            try:
+                df = pd.read_csv(file_path, sep=r"\s+", engine="python")
+            except Exception as e:
+                print(f"Could not read {file_path}: {e}")
+                summary[f"{metric}_mean"] = None
+                summary[f"{metric}_std"] = None
+                continue
+
+            if column not in df.columns:
+                print(f"Missing column '{column}' in {file_path}")
+                summary[f"{metric}_mean"] = None
+                summary[f"{metric}_std"] = None
+                continue
+
+            values = pd.to_numeric(df[column], errors="coerce").dropna()
+
+            summary[f"{metric}_mean"] = values.mean()
+            summary[f"{metric}_std"] = values.std(ddof=1)
+
+            if n_runs is None:
+                n_runs = len(values)
+
+        summary["n_runs"] = n_runs
+        results.append(summary)
+
+    if not results:
+        print(f"No valid metric files found under: {root_dir}")
+        return pd.DataFrame()
+
+    result = pd.DataFrame(results)
+
+    result = result[
+        [
+            "task",
+            "method",
+            "n_runs",
+            "psnr_mean",
+            "psnr_std",
+            "ssim_mean",
+            "ssim_std",
+            "lpips_mean",
+            "lpips_std",
+        ]
+    ]
+
+    result = result.sort_values(
+        ["task", "method"]
+    ).reset_index(drop=True)
+
+    result.to_excel(out_xlsx, index=False)
+
+    print(f"Saved rebuttal metrics to: {out_xlsx}")
+    return result
+
 #####################################################################################################
 # convergence analysis
 
