@@ -1,8 +1,16 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+import argparse
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# os.environ["WORLD_SIZE"] = "1"
+
+pre_parser = argparse.ArgumentParser(add_help=False)
+pre_parser.add_argument("--gpu", type=str, default="0")
+pre_args, _ = pre_parser.parse_known_args()
+
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = pre_args.gpu
 os.environ["WORLD_SIZE"] = "1"
 import random
-import argparse
 import torch
 import numpy as np
 import torch.backends.cudnn as cudnn
@@ -20,7 +28,7 @@ from pnpflow.methods.ot_ode import OT_ODE
 from pnpflow.methods.flow_priors import FLOW_PRIORS
 from pnpflow.utils import gaussian_blur, define_model, load_model
 import warnings
-warnings.filterwarnings("ignore", module="matplotlib\\..*")
+warnings.filterwarnings("ignore")
 
 torch.cuda.empty_cache()
 # os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
@@ -63,6 +71,10 @@ def main():
     args = parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("device", device)
+    if torch.cuda.is_available():
+        print("CUDA_VISIBLE_DEVICES =", os.environ.get("CUDA_VISIBLE_DEVICES"))
+        print("Logical GPU index   =", torch.cuda.current_device())
+        print("GPU name            =", torch.cuda.get_device_name(torch.cuda.current_device()))
 
     if args.seed is not None:
         random.seed(args.seed)
@@ -182,10 +194,6 @@ def main():
                 sigma_blur, kernel_size, "fft", args.num_channels, args.dim_image, device)
 
         elif args.problem == "nonlinear_deblurring":
-            # Nonlinear blur forward model (Tran et al., 2021 / DPS-style, see
-            # pnpflow/degradations.py::NonlinearBlur). Pass a checkpoint via
-            # `--opts nonlinear_blur_checkpoint <path>` to use pretrained
-            # weights; otherwise a fixed randomly-initialized network is used.
             if args.noise_type == 'gaussian':
                 sigma_noise = 0.05
             else:
@@ -197,9 +205,6 @@ def main():
                 device=device)
 
         elif args.problem == "phase_retrieval":
-            # Fourier phase retrieval, y = |FFT(pad(x))| (see
-            # pnpflow/degradations.py::PhaseRetrieval). Override the
-            # oversampling ratio via `--opts pr_oversample <float>`.
             if args.noise_type == 'gaussian':
                 sigma_noise = 0.01  
             else:
@@ -209,13 +214,8 @@ def main():
                 oversample=getattr(args, 'pr_oversample', 2.0),
                 dim_image=args.dim_image, num_channels=args.num_channels,
                 device=device)
-            # Phase retrieval's loss landscape has many spurious local
-            # minima that a single random init can land in (see
-            # conversation) -- default to multiple restarts, keeping
-            # whichever has the lowest final ||H(x)-y|| per image. Override
-            # via `--opts num_restarts N`.
             if not hasattr(args, 'num_restarts'):
-                args.num_restarts = 1
+                args.num_restarts = 4
 
         print('Solving the {} inverse problem with the method {}...'.format(
             args.problem, args.method))

@@ -112,3 +112,11 @@ echo "All experiments completed successfully!"
 
 # echo "All multi-seed experiments completed successfully!"
 # echo "Logs saved to ${results_dir}/ for aggregation."
+
+
+
+
+
+# python main.py --opts dataset celeba train False eval True problem phase_retrieval method pnp_flow_admm rho_admm 1000 steps_pnp 200 admm_gd_steps 10 t_schedule_gamma 1.0
+# python main.py --opts dataset celeba train False eval True problem phase_retrieval method pnp_flow_fbs
+# python main.py --opts dataset celeba train False eval True problem phase_retrieval method d_flow 

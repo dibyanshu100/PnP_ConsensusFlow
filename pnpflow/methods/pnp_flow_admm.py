@@ -64,8 +64,6 @@ class PNP_FLOW_ADMM(object):
             # Fixed-size steps are unsafe here: the data term's curvature
             # scales with 1/sigma^2 (which can dwarf rho), so a step size
             # that is safe for one (rho, sigma) pair can diverge for another.
-            # Use gradient steps with backtracking (Armijo) line search
-            # instead, which needs no Lipschitz estimate of H.
             x = x_init.clone()
             target = z - u
 
@@ -73,8 +71,8 @@ class PNP_FLOW_ADMM(object):
                 return sigma2_inv * 0.5 * torch.sum((H(xv) - y) ** 2) \
                     + rho * 0.5 * torch.sum((xv - target) ** 2)
 
-            gd_steps = int(getattr(self.args, 'admm_gd_steps', 10))
-            lr = float(getattr(self.args, 'admm_gd_lr_init', 1.0 / rho))
+            gd_steps = int(getattr(self.args, 'admm_gd_steps'))
+            lr = 1.0 / rho #float(getattr(self.args, 'admm_gd_lr_init', 1.0 / rho))
             for _ in range(gd_steps):
                 grad = sigma2_inv * degradation.vjp(x, H(x) - y) + rho * (x - target)
                 grad_norm_sq = torch.sum(grad ** 2)

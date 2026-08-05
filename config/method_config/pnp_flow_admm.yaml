@@ -1,5 +1,5 @@
 METHOD:
-    steps_pnp: 200
+    steps_pnp: 100
     rho_admm: 1000   
     max_cgiter: 10    
     cg_tol: 1e-5
@@ -7,5 +7,8 @@ METHOD:
     adaptive_noise: True
     deterministic_noise: False  # Only applicable when adaptive_noise is False
     t_schedule_gamma: 1.0
+    admm_gd_steps: 10
+
+
     
     

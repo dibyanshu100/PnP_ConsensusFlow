@@ -5,11 +5,6 @@ from pnpflow.utils import square_mask, random_mask, paintbrush_mask, gaussian_bl
 
 
 class Degradation:
-
-    # Whether H is linear. Linear operators get an exact adjoint (H_adj) used
-    # both for gradients/data-consistency and for display/initialization.
-    # Nonlinear operators (see below) override H_adj with a display/init-only
-    # stand-in and rely on `vjp` (vector-Jacobian product) for gradients.
     is_linear = True
 
     def H(self, x):
@@ -20,10 +15,8 @@ class Degradation:
 
     def vjp(self, x, v):
         """Returns v^T J_H(x), the vector-Jacobian product of H at x.
-
         For linear H this is exactly H_adj(v) (cheap, exact). For nonlinear H
-        it is computed via autograd, so it is correct regardless of the outer
-        `torch.no_grad()` context the PnP/ADMM loops run in.
+        it is computed via autograd.
         """
         if self.is_linear:
             return self.H_adj(v)
