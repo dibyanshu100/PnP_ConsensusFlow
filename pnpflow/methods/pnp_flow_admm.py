@@ -31,8 +31,18 @@ class PNP_FLOW_ADMM(object):
             beta = torch.sum(r**2)/(rr+eps)
             d = r + beta*d        
         return x
-    
-    
+
+    def rho_schedule(self, rho, t_val):
+        style = getattr(self.args, 'rho_schedule_style')
+        beta = float(getattr(self.args, 'beta_rho'))
+
+        if style == 'increasing_power':
+            return rho * (1.0 + t_val) ** beta
+        elif style == 'inverse_power':
+            return rho / (max(1.0 - t_val, 1e-3) ** beta)
+        else:
+            return rho
+
     def admm_x_update(self, x_init, z, u, y, degradation, rho, sigma_noise, max_cgiter=50, cg_tol=1e-6):
         """
         For linear H, solves in closed form via CG:
@@ -124,7 +134,7 @@ class PNP_FLOW_ADMM(object):
 
         plt.figure()
         plt.plot(primal_res_array, label=r"$\|x^k - z^k\|_2$")
-        plt.plot(dual_res_array, label=r"$\rho\|z^k - z^{k-1}\|_2$")
+        plt.plot(dual_res_array, label=r"$\rho_t\|z^k - z^{k-1}\|_2$")
         plt.plot(u_inc_array, label=r"$\|u^{k+1} - u^k\|_2$")
         plt.xlabel("Iteration")
         plt.ylabel("Norm value")
@@ -137,6 +147,7 @@ class PNP_FLOW_ADMM(object):
 
 
     def solve_ip(self, test_loader, degradation, sigma_noise, H_funcs=None):
+        num_samples = int(getattr(self.args, 'num_denoiser_calls', 5))  
         H = degradation.H
         H_adj = degradation.H_adj
         self.args.sigma_noise = sigma_noise
@@ -150,14 +161,12 @@ class PNP_FLOW_ADMM(object):
         max_cgiter = int(self.args.max_cgiter)
         cg_tol = float(self.args.cg_tol)
 
-        # Multiple random restarts per image, keeping whichever restart has
-        # the lowest final data residual ||H(x)-y||. Defaults to 1 (i.e. the
-        # exact prior single-shot behavior, byte-for-byte, since the RNG is
-        # untouched in that case) for every problem except phase_retrieval,
-        # whose loss landscape has many spurious local minima that a single
-        # random init can land in -- see conversation. Override with
-        # `--opts num_restarts N`.
+        # Multiple restarts for phase retrieval
         num_restarts = int(getattr(self.args, 'num_restarts', 1))
+
+        # early stopping for denoising and deblurring
+        early_stopping = bool(getattr(self.args, 'early_stopping', False))
+        max_steps = steps - 0.15 * steps
 
         loader = iter(test_loader)
         # skip first N batches
@@ -172,7 +181,7 @@ class PNP_FLOW_ADMM(object):
             clean_img = clean_img.to(self.device)
 
             noisy_img = H(clean_img.clone())
-            # torch.manual_seed(batch)
+            torch.manual_seed(batch)
             noisy_img = noisy_img + torch.randn_like(noisy_img) * sigma_noise
 
             # Keep clean_img on CPU for metrics if your utils expect that
@@ -198,7 +207,8 @@ class PNP_FLOW_ADMM(object):
                     print(f"  [restart {restart}/{num_restarts}]")
 
                 # ADMM initialization
-                x = torch.randn(clean_img.shape, device=self.device)
+                # x = torch.randn(clean_img.shape, device=self.device)
+                x = H_adj(torch.ones_like(noisy_img)).to(self.device)
                 z = x.clone()
                 u = torch.zeros_like(x)
                 gauss_noise = x.clone()
@@ -223,6 +233,12 @@ class PNP_FLOW_ADMM(object):
 
                         t_view = t1.view(-1, 1, 1, 1)
 
+                        # Optional t-dependent penalty parameter, analogous
+                        # to FBS's gamma_t = (1-t)^alpha schedule. See
+                        # rho_schedule() docstring. Defaults to plain
+                        # constant rho unless rho_schedule_style is set.
+                        rho_t = self.rho_schedule(rho, t_val)
+
                         # Save previous values for diagnostics
                         z_prev = z.clone()
                         u_prev = u.clone()
@@ -234,7 +250,7 @@ class PNP_FLOW_ADMM(object):
                             u=u,
                             y=noisy_img,
                             degradation=degradation,
-                            rho=rho,
+                            rho=rho_t,
                             sigma_noise=sigma_noise,
                             max_cgiter=max_cgiter,
                             cg_tol=cg_tol
@@ -242,23 +258,24 @@ class PNP_FLOW_ADMM(object):
 
                         # z-update: flow prior / denoiser step
                         z_input = x + u
-                        z_tilde = self.projection_step(z_input, t_view, gauss_noise)
-                        z = self.denoiser(z_tilde, t1)
-                        gauss_noise_1 = (z_tilde - z*t_view)/ ((1-t_view) + 1e-12)
-                        gauss_noise_2 = torch.randn_like(x)
+                        z_new = torch.zeros_like(x)
                         w1 = t_view
                         w2 = 1 - t_view
-
-                        if self.args.adaptive_noise:
-                            # print("PnP-ADMM with adaptive projection")
-                            gauss_noise = (w2 * gauss_noise_2 + w1 * gauss_noise_1) / torch.sqrt(w1**2 + w2**2 + 1e-12) 
-                        else:
-                            if self.args.deterministic_noise:
-                                # print("PnP-ADMM with deterministic projection")
-                                gauss_noise = gauss_noise_1
+                        for _ in range(num_samples):
+                            z_tilde = self.projection_step(z_input, t_view, gauss_noise)
+                            z = self.denoiser(z_tilde, t1)
+                            gauss_noise_1 = (z_tilde - z*t_view)/ ((1-t_view) + 1e-12)
+                            gauss_noise_2 = torch.randn_like(x)
+                            if self.args.adaptive_noise:
+                                gauss_noise = (w2 * gauss_noise_2 + w1 * gauss_noise_1) / torch.sqrt(w1**2 + w2**2 + 1e-12)
                             else:
-                                # print("PnP-ADMM with stochastic projection")
-                                gauss_noise = gauss_noise_2
+                                if self.args.deterministic_noise:
+                                    gauss_noise = gauss_noise_1
+                                else:
+                                    gauss_noise = gauss_noise_2
+                            z_new = z_new + z
+                        z_new /= num_samples
+                        z = z_new
 
                         # u-update: dual variable
                         u = u + (x-z) 
@@ -266,12 +283,12 @@ class PNP_FLOW_ADMM(object):
                         # Store norms
                         if self.args.save_norms_admm and restart == 0:
                             primal_res = torch.norm(x - z)
-                            dual_res = rho * torch.norm(z - z_prev)
+                            dual_res = rho_t * torch.norm(z - z_prev)
                             u_inc = torch.norm(u - u_prev)
                             res_norm_list.append(primal_res.item())
                             dual_res_list.append(dual_res.item())
                             u_norm_list.append(u_inc.item())
-                            print(f"Iter {iteration}: ||x-z||={primal_res.item():.4f}, rho||z-z_precv|| = {dual_res.item():.4f}), ||u-u_prev|| = {u_inc.item():.4f}")
+                            print(f"Iter {iteration}: rho_t={rho_t:.4f}, ||x-z||={primal_res.item():.4f}, rho_t||z-z_precv|| = {dual_res.item():.4f}), ||u-u_prev|| = {u_inc.item():.4f}")
 
                         if self.args.compute_time:
                             torch.cuda.synchronize()
@@ -290,6 +307,11 @@ class PNP_FLOW_ADMM(object):
                                 utils.compute_lpips(
                                     clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration
                                 )
+
+                        if early_stopping:
+                            if iteration >= max_steps:
+                                print(f"Stopping at iter {iteration}")
+                                break
 
                 # Score this restart by its final data residual, per image,
                 # and keep whichever restart is best for each image so far.

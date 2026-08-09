@@ -8,7 +8,7 @@ METHOD:
     deterministic_noise: False  # Only applicable when adaptive_noise is False
     t_schedule_gamma: 1.0
     admm_gd_steps: 10
-
-
-    
-    
+    beta_rho: 0.0
+    rho_schedule_style: 'inverse_power'
+    early_stopping: False
+    num_denoiser_calls: 5

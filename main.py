@@ -145,9 +145,9 @@ def main():
             elif args.noise_type == 'gaussian':
                 sigma_noise = 0.05
             if args.dim_image == 128:
-                half_size_mask = 20
+                half_size_mask = 20 #30 #20
             elif args.dim_image == 256:
-                half_size_mask = 40
+                half_size_mask = 40 #60 #40
             degradation = BoxInpainting(half_size_mask)
 
         elif args.problem == "paintbrush_inpainting":
@@ -162,16 +162,16 @@ def main():
                 sigma_noise = 0.3
             elif args.noise_type == 'gaussian':
                 sigma_noise = 0.01
-            p = 0.7
+            p = 0.85 #0.7
             degradation = RandomInpainting(p)
 
         elif args.problem == "superresolution":
             if args.dim_image == 128:
                 print('Superresolution with scale factor 2')
-                sf = 2
+                sf = 4 #4 #2
             elif args.dim_image == 256:
                 print('Superresolution with scale factor 4')
-                sf = 4
+                sf = 8 #8 #4
             if args.noise_type == 'laplace':
                 sigma_noise = 0.3
 
@@ -215,7 +215,20 @@ def main():
                 dim_image=args.dim_image, num_channels=args.num_channels,
                 device=device)
             if not hasattr(args, 'num_restarts'):
-                args.num_restarts = 4
+                args.num_restarts = 2
+
+        elif args.problem == "hdr_reconstruction":
+            if args.noise_type == 'gaussian':
+                sigma_noise = 0.05
+            else:
+                raise ValueError(
+                    'HDR reconstruction currently only supports gaussian noise')
+            degradation = HDRReconstruction(
+                scale=getattr(args, 'hdr_scale', 2.0))
+
+        else:
+            raise ValueError(
+                "Unknown problem '{}'".format(args.problem))
 
         print('Solving the {} inverse problem with the method {}...'.format(
             args.problem, args.method))
@@ -258,5 +271,6 @@ def main():
         method.run_method(data_loaders, degradation, sigma_noise)
 
 # python main.py --opts dataset afhq_cat train False eval True problem denoising start_batch 4 method pnp_flow_admm
+# python main.py --opts dataset afhq_cat train False eval True problem hdr_reconstruction start_batch 4 method pnp_flow_admm
 if __name__ == "__main__":
     main()

@@ -26,7 +26,6 @@ class Degradation:
             grad = torch.autograd.grad(out, x, grad_outputs=v)[0]
         return grad.detach()
 
-
 class Denoising(Degradation):
     def H(self, x):
         return x
@@ -185,29 +184,6 @@ def _load_kernel_wizard():
 
 
 class NonlinearBlur(Degradation):
-    """Nonlinear blur forward operator: KernelWizard's non-blind reblurring
-    path (Tran et al., 2021, "Explore Image Deblurring via Encoded Blur
-    Kernel Space", CVPR'21), used as-is by DPS (Chung et al., 2022) for their
-    nonlinear-deblurring baseline.
-
-    H(x) = KernelWizard.adaptKernel(x, kernel) for a kernel code sampled once
-    at construction time (kept fixed thereafter, so H is a deterministic
-    function of x -- the official DPS operator instead resamples the kernel
-    on every call, which is fine for their single-shot diffusion guidance but
-    would make H a moving target for the iterative solvers in this codebase).
-
-    Requires the official pretrained weights ("GOPRO_wVAE.pth" from BKSE's
-    model zoo, https://github.com/VinAIResearch/blur-kernel-space-exploring)
-    passed via `checkpoint_path`; without it, this falls back to a randomly-
-    initialized (frozen) KernelWizard so the pipeline is still runnable
-    end-to-end, but a loud warning is printed since the resulting blur is not
-    meaningful for anything you'd report.
-
-    H is genuinely nonlinear (not a fixed convolution), so there is no exact
-    adjoint. H_adj is only a display/initialization stand-in (identity, since
-    input and output live in the same pixel space); actual gradients of the
-    data-fidelity term go through `vjp` instead.
-    """
 
     is_linear = False
 
@@ -273,25 +249,6 @@ class NonlinearBlur(Degradation):
 
 
 class PhaseRetrieval(Degradation):
-    """Fourier phase retrieval: y = |FFT(pad(x))|, as used e.g. in DPS
-    (Chung et al., 2022). Padding (oversampling) the image before the FFT is
-    the standard convention in the phase-retrieval literature (commonly a
-    factor of 2) so that the magnitude-only measurement is informative enough
-    for the (still highly non-convex) problem to be solvable.
-
-    Uses an orthonormal FFT (norm='ortho'), matching DPS's own operator
-    (their fft2_m -> fft2c_new(..., norm="ortho")) -- this is not optional:
-    the unnormalized FFT scales |FFT(x)| up by the padded pixel count (tens
-    of thousands for typical image sizes), which silently breaks every
-    sigma_noise/rho/step-size default in this codebase, all of which assume
-    H(x) and y live on the same [-1, 1] scale as the image.
-
-    H is non-differentiable-invertible and has no adjoint. H_adj is only a
-    display/initialization stand-in: it applies a random phase to the
-    magnitude and inverts, then crops back to the image size -- the standard
-    initialization used by classical phase-retrieval algorithms (e.g. HIO).
-    """
-
     is_linear = False
 
     def __init__(self, oversample=2.0, dim_image=128, num_channels=3, device="cuda"):
@@ -313,3 +270,18 @@ class PhaseRetrieval(Degradation):
         x_pad = torch.real(torch.fft.ifft2(y.to(torch.complex64) * phase, norm='ortho'))
         c = self.pad
         return x_pad[..., c:c + self.dim_image, c:c + self.dim_image]
+
+
+class HDRReconstruction(Degradation):
+    is_linear = False
+
+    def __init__(self, scale=2.0):
+        super().__init__()
+        self.scale = scale
+
+    def H(self, x):
+        return torch.clamp(self.scale * x, -1.0, 1.0)
+
+    def H_adj(self, y):
+        # Display/initialization stand-in only -- see class docstring.
+        return y / self.scale
