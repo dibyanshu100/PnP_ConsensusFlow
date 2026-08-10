@@ -144,10 +144,12 @@ def main():
                 sigma_noise = 0.3
             elif args.noise_type == 'gaussian':
                 sigma_noise = 0.05
-            if args.dim_image == 128:
-                half_size_mask = 20 #30 #20
+            if hasattr(args, 'box_mask_half_size'):
+                half_size_mask = int(args.box_mask_half_size)
+            elif args.dim_image == 128:
+                half_size_mask = 20   #30 #20
             elif args.dim_image == 256:
-                half_size_mask = 40 #60 #40
+                half_size_mask = 40   #60 #40
             degradation = BoxInpainting(half_size_mask)
 
         elif args.problem == "paintbrush_inpainting":
@@ -162,16 +164,17 @@ def main():
                 sigma_noise = 0.3
             elif args.noise_type == 'gaussian':
                 sigma_noise = 0.01
-            p = 0.85 #0.7
+            p = float(getattr(args, 'random_inpainting_p', 0.85))     # 0.7 0.85
             degradation = RandomInpainting(p)
 
         elif args.problem == "superresolution":
-            if args.dim_image == 128:
-                print('Superresolution with scale factor 2')
-                sf = 4 #4 #2
+            if hasattr(args, 'sr_scale_factor'):
+                sf = int(args.sr_scale_factor)
+            elif args.dim_image == 128:
+                sf = 4  #4 #2
             elif args.dim_image == 256:
-                print('Superresolution with scale factor 4')
-                sf = 8 #8 #4
+                sf = 8  #8 #4
+            print('Superresolution with scale factor {}'.format(sf))
             if args.noise_type == 'laplace':
                 sigma_noise = 0.3
 
