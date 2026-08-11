@@ -273,16 +273,17 @@ def save_outputs(df: pd.DataFrame, xlsx_path: str):
 
 def extract_basic_metrics(root_dir: Path, out_xlsx: str = "metrics_summary.xlsx") -> pd.DataFrame:
     rows = []
+    cols_to_keep = ["psnr_rec", "psnr_noisy", "ssim_rec", "ssim_noisy", "lpips_rec", "lpips_noisy"]
+
+    def to_bool(x):
+        return x if isinstance(x, bool) else str(x).strip().lower() == "true"
 
     for file_path in root_dir.rglob("final_*.txt"):
         rel = file_path.relative_to(root_dir).parts
-
-        # expected: task / method / test / ... / final_xxx.txt
         if len(rel) < 3:
             continue
 
-        task = rel[0]
-        method = rel[1]
+        task, method = rel[0], rel[1]
 
         try:
             df = pd.read_csv(file_path, sep=r"\s+", engine="python")
@@ -293,32 +294,33 @@ def extract_basic_metrics(root_dir: Path, out_xlsx: str = "metrics_summary.xlsx"
         if df.empty:
             continue
 
-        row = {
-            "task": task,
-            "method": method,
-        }
+        if method == "pnp_flow_admm":
+            for _, r in df.iterrows():
+                adaptive = to_bool(r.get("adaptive_noise", False))
+                deterministic = to_bool(r.get("deterministic_noise", False))
 
-        cols_to_keep = [
-            "psnr_rec", "psnr_noisy",
-            "ssim_rec", "ssim_noisy",
-            "lpips_rec", "lpips_noisy",
-        ]
+                if adaptive:
+                    method_name = "ADMM adaptive"
+                elif deterministic:
+                    method_name = "ADMM deterministic"
+                else:
+                    method_name = "ADMM stochastic"
 
-        for col in cols_to_keep:
-            if col in df.columns:
-                row[col] = df.iloc[0][col]
+                row = {"task": task, "method": method_name}
+                row.update({col: r[col] for col in cols_to_keep if col in df.columns})
+                rows.append(row)
 
-        rows.append(row)
+        else:
+            r = df.iloc[0]
+            row = {"task": task, "method": method}
+            row.update({col: r[col] for col in cols_to_keep if col in df.columns})
+            rows.append(row)
 
     result = pd.DataFrame(rows)
 
     if not result.empty:
-        result = (
-            result.groupby(["task", "method"], as_index=False)
-            .first()
-            .sort_values(["task", "method"])
-            .reset_index(drop=True)
-        )
+        result = result.groupby(["task", "method"], as_index=False).first()
+        result = result.sort_values(["task", "method"]).reset_index(drop=True)
         result.to_excel(out_xlsx, index=False)
 
     return result
@@ -743,44 +745,39 @@ def read_average_value(file_path: Path):
 
 
 def extract_time_memory_summary(root_dir: Path) -> pd.DataFrame:
-    """
-    Extract:
-      - time from time_average.txt
-      - memory from max_memory_average.txt
-
-    Expected folder structure:
-      root_dir / task / method / model / ... / time_average.txt
-    """
     rows = []
 
     for time_file in root_dir.rglob("time_average.txt"):
         exp_dir = time_file.parent
         mem_file = exp_dir / "max_memory_average.txt"
+        rel = time_file.relative_to(root_dir).parts
 
-        rel_parts = time_file.relative_to(root_dir).parts
-        if len(rel_parts) < 3:
+        if len(rel) < 3:
             continue
 
-        task = rel_parts[0]
-        method = rel_parts[1]
-        model = rel_parts[2]
+        task, method, model = rel[0], rel[1], rel[2]
+
+        if method == "pnp_flow_admm":
+            path = str(exp_dir).lower()
+            if "adaptive_noise=true" in path:
+                method = "ADMM adaptive"
+            elif "adaptive_noise=false" in path and "deterministic_noise=true" in path:
+                method = "ADMM deterministic"
+            elif "adaptive_noise=false" in path and "deterministic_noise=false" in path:
+                method = "ADMM stochastic"
 
         time_avg = read_average_value(time_file)
-        max_memory_avg = read_average_value(mem_file)
-        if max_memory_avg is not None:
-            max_memory_avg = max_memory_avg / (1024 ** 3)
+        memory_avg = read_average_value(mem_file)
+        if memory_avg is not None:
+            memory_avg /= 1024 ** 3
 
         rows.append({
-            "task": task,
-            "method": method,
-            "model": model,
-            "time_average": time_avg,
-            "max_memory_average_gb": max_memory_avg,
-            "experiment_dir": str(exp_dir),
+            "task": task, "method": method, "model": model,
+            "time_average": time_avg, "max_memory_average_gb": memory_avg,
+            "experiment_dir": str(exp_dir)
         })
 
     df = pd.DataFrame(rows)
-
     if not df.empty:
         df = df.sort_values(["task", "method", "model"]).reset_index(drop=True)
 
