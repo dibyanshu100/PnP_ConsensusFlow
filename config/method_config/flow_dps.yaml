@@ -1,0 +1,7 @@
+METHOD:
+    steps_ode: 100          
+    start_time: 0.0         
+    grad_steps: 3            
+    grad_step_size: 0.2      
+    use_stochastic_noise: True   
+    num_restarts: 1         

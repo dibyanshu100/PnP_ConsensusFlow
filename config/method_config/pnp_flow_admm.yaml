@@ -1,14 +1,13 @@
 METHOD:
     steps_pnp: 100
-    rho_admm: 1000   
+    rho_admm: 100 
     max_cgiter: 10    
     cg_tol: 1e-5
     save_norms_admm: True
     adaptive_noise: True
     deterministic_noise: False  # Only applicable when adaptive_noise is False
-    t_schedule_gamma: 1.0
+    t_schedule_gamma: 0.2
     admm_gd_steps: 10
-    beta_rho: 0.0
-    rho_schedule_style: 'inverse_power'
+    beta_rho: 1.5                     # if beta = 0 then rho = constant across steps
     early_stopping: False
     num_denoiser_calls: 5

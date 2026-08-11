@@ -199,10 +199,6 @@ class NonlinearBlur(Degradation):
         if checkpoint_path is not None:
             state = torch.load(checkpoint_path, map_location=device)
             state = state.get('state_dict', state)
-            # strict=True on purpose: with the real architecture in place, a
-            # key mismatch means something is actually wrong (wrong
-            # checkpoint, wrong opt dict) and should fail loudly rather than
-            # silently falling back to partially-random weights.
             self.net.load_state_dict(state, strict=True)
             print(f"[NonlinearBlur] loaded official KernelWizard weights from {checkpoint_path}")
         else:
@@ -214,15 +210,6 @@ class NonlinearBlur(Degradation):
         for p in self.net.parameters():
             p.requires_grad_(False)
 
-        # Fixed kernel code (same scale as DPS's own random_kernel) so that H
-        # is a deterministic function of x -- see class docstring. Its
-        # spatial size must match KernelAdapter's innermost feature map: the
-        # feature extractor downsamples by 4x, then the 5-level UNet in
-        # KernelAdapter downsamples by a further 32x, i.e. total 128x. DPS
-        # hardcodes this to 2x2 because they only ever use 256x256 images
-        # (256/128=2); it must be recomputed for other image sizes (e.g. our
-        # 128x128 celeba config gives 1x1) or KernelAdapter's internal
-        # torch.cat of the kernel with the downsampled features shape-mismatches.
         kernel_spatial = max(dim_image // 128, 1)
         if dim_image % 128 != 0:
             raise ValueError(

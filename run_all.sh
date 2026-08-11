@@ -1,257 +1,335 @@
-# RANDOM=42
-
-# nohup bash run_all.sh > output.log 2>&1 &
-
-#!/bin/bash
-
-# RANDOM = 42
-
-# dataset="celeba"
-# method="pnp_flow_admm"
-
-# gammas=(0.2 1.0 2.0)
-
-# problems=(
-#     superresolution
-#     random_inpainting
-#     gaussian_deblurring_FFT
-#     inpainting
-#     denoising
-#     paintbrush_inpainting
-# )
-
-# start_batch=1
-
-# for problem in "${problems[@]}"; do
-
-#     echo "===================================="
-#     echo "Problem: $problem  start_batch=$start_batch"
-#     echo "===================================="
-
-#     for gamma in "${gammas[@]}"; do
-
-#         echo "Running gamma=$gamma"
-
-#         python main.py --opts \
-#             dataset "$dataset" \
-#             train False \
-#             eval True \
-#             problem "$problem" \
-#             start_batch "$start_batch" \
-#             max_batch 5 \
-#             batch_size_ip 5 \
-#             method "$method" \
-#             t_schedule_gamma "$gamma"
-
-#     done
-# done
-
-# echo "All experiments completed successfully!"
-
-
-# #!/bin/bash
-# #!/bin/bash
-# set -e
-
-# dataset="afhq_cat"
-# method="pnp_flow_admm"
-
-# # Five independent runs for reporting mean ± standard deviation
-# seeds=(42 123 2024 3407 7777)
-
-# # Representative subset requested by the reviewer
-# problems=(
-#     superresolution
-#     random_inpainting
-#     gaussian_deblurring_FFT
-#     inpainting
-#     denoising
-#     paintbrush_inpainting
-# )
-
-# # Main-paper configuration: linear timestep schedule
-# gamma=1.0
-
-# # Use the same test subset for every seed
-# start_batch=1
-# max_batch=5
-# batch_size=5
-
-# results_dir="results/multiseed"
-# mkdir -p "$results_dir"
-
-# for seed in "${seeds[@]}"; do
-#     echo "============================================"
-#     echo "Seed: $seed"
-#     echo "============================================"
-
-#     for problem in "${problems[@]}"; do
-#         echo "--------------------------------------------"
-#         echo "Dataset: $dataset"
-#         echo "Problem: $problem"
-#         echo "Seed: $seed"
-#         echo "Start batch: $start_batch"
-#         echo "--------------------------------------------"
-
-#         log_file="${results_dir}/${dataset}_${problem}_seed${seed}.log"
-
-#         python main.py --opts \
-#             dataset "$dataset" \
-#             train False \
-#             eval True \
-#             problem "$problem" \
-#             start_batch "$start_batch" \
-#             max_batch "$max_batch" \
-#             batch_size_ip "$batch_size" \
-#             method "$method" \
-#             t_schedule_gamma "$gamma" \
-#             seed "$seed" \
-#             | tee "$log_file"
-#     done
-# done
-
-# echo "All multi-seed experiments completed successfully!"
-# echo "Logs saved to ${results_dir}/ for aggregation."
-
-
-
-
-
-# python main.py --opts dataset celeba train False eval True problem phase_retrieval method pnp_flow_admm rho_admm 1000 steps_pnp 200 admm_gd_steps 10 t_schedule_gamma 1.0
-# python main.py --opts dataset celeba train False eval True problem phase_retrieval method pnp_flow_fbs
-# python main.py --opts dataset celeba train False eval True problem phase_retrieval method d_flow 
-
-
-#!/usr/bin/env bash
-
 set -u
 set -o pipefail
 
-# Seed Bash's pseudo-random generator.
-RANDOM=42
+GPU="${GPU:-0}"
+export CUDA_VISIBLE_DEVICES="$GPU"
 
-datasets=(
-  celeba
-  afhq_cat
-)
+START_BATCH="${START_BATCH:-0}"
+MAX_BATCH="${MAX_BATCH:-25}"
+BATCH_SIZE_IP="${BATCH_SIZE_IP:-4}"
 
-problems=(
-  denoising
-  gaussian_deblurring_FFT
-  superresolution
-  random_inpainting
-  inpainting
-)
+SEED="${SEED:-42}"
+NUM_RESTARTS_PHASE_RETRIEVAL="${NUM_RESTARTS_PHASE_RETRIEVAL:-2}"
 
-# Use "pnp_flow" instead if that is the exact name expected by your config.
-method="pnp_flow_fbs"
+LR_PNP="${LR_PNP:-1.0}"
+NUM_SAMPLES="${NUM_SAMPLES:-5}"
 
-lr_pnp=1.0
-num_samples=5
+NONLINEAR_BLUR_CKPT="${NONLINEAR_BLUR_CKPT:-./pretrained/bkse/GOPRO_wVAE.pth}"
 
-eval_split="test"
-max_batch=2
-batch_size_ip=4
+TOTAL=84
+RUN_NUM=0
+FAILED=0
+FAILED_LABELS=()
 
-for dataset in "${datasets[@]}"; do
-  echo "============================================================"
-  echo "Dataset: $dataset"
-  echo "============================================================"
+# Wraps a single run: prints "[n/TOTAL] label", times it, reports pass/fail.
+run() {
+  local label="$1"
+  shift
+  RUN_NUM=$((RUN_NUM + 1))
+  local remaining=$((TOTAL - RUN_NUM))
 
-  for problem in "${problems[@]}"; do
+  printf '\n============================================================\n'
+  printf '[%d/%d] %s  (%d left after this)\n' "$RUN_NUM" "$TOTAL" "$label" "$remaining"
+  printf '============================================================\n'
 
-    # Dataset- and task-specific PnP-Flow hyperparameters.
-    case "${dataset}:${problem}" in
+  local start_ts elapsed
+  start_ts=$(date +%s)
 
-      # ---------------- CelebA ----------------
-      celeba:superresolution)
-        alpha=0.3
-        steps_pnp=100
-        ;;
+  "$@"
+  local status=$?
 
-      celeba:random_inpainting)
-        alpha=0.01
-        steps_pnp=100
-        ;;
+  elapsed=$(( $(date +%s) - start_ts ))
+  if [[ "$status" -ne 0 ]]; then
+    printf '\n>>> FAILED (%d): %s  [%ds]\n' "$status" "$label" "$elapsed"
+    FAILED=$((FAILED + 1))
+    FAILED_LABELS+=("$label")
+  else
+    printf '\n>>> DONE: %s  [%ds]\n' "$label" "$elapsed"
+  fi
+}
 
-      celeba:denoising)
-        alpha=0.8
-        steps_pnp=100
-        ;;
 
-      celeba:gaussian_deblurring_FFT)
-        alpha=0.01
-        steps_pnp=100
-        ;;
+# ===== celeba / inpainting =====
+run "celeba / inpainting / pnp_flow_admm[adaptive]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 100 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-      celeba:inpainting)
-        # Corresponds to box inpainting in the table.
-        alpha=0.5
-        steps_pnp=100
-        ;;
+run "celeba / inpainting / pnp_flow_admm[stochastic]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 100 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise False deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-      # ---------------- AFHQ-Cat ----------------
-      afhq_cat:denoising)
-        alpha=0.8
-        steps_pnp=100
-        ;;
+run "celeba / inpainting / pnp_flow_admm[deterministic]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 100 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise False deterministic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-      afhq_cat:gaussian_deblurring_FFT)
-        alpha=0.01
-        steps_pnp=500
-        ;;
+run "celeba / inpainting / pnp_flow_fbs" \
+  python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 100 lr_pnp "$LR_PNP" alpha 0.5 num_samples "$NUM_SAMPLES" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-      afhq_cat:superresolution)
-        alpha=0.01
-        steps_pnp=500
-        ;;
+run "celeba / inpainting / ot_ode" \
+  python main.py --opts method ot_ode dataset celeba problem inpainting steps_ode 100 start_time 0.1 gamma gamma_t model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-      afhq_cat:random_inpainting)
-        alpha=0.01
-        steps_pnp=200
-        ;;
+run "celeba / inpainting / flow_priors" \
+  python main.py --opts method flow_priors dataset celeba problem inpainting lmbda 10000 eta 0.01 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-      afhq_cat:inpainting)
-        # Corresponds to box inpainting in the table.
-        alpha=0.5
-        steps_pnp=100
-        ;;
+run "celeba / inpainting / d_flow" \
+  python main.py --opts method d_flow dataset celeba problem inpainting lmbda 0.001 alpha 0.1 max_iter 9 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-      *)
-        echo "No PnP-Flow parameters defined for:"
-        echo "  dataset=$dataset"
-        echo "  problem=$problem"
-        exit 1
-        ;;
-    esac
+run "celeba / inpainting / flow_dps [UNTUNED]" \
+  python main.py --opts method flow_dps dataset celeba problem inpainting steps_ode 100 grad_steps 3 grad_step_size 1.0 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-    start_batch=$((RANDOM % 10 + 1))
 
-    echo
-    echo "------------------------------------------------------------"
-    echo "Running PnP-Flow"
-    echo "  dataset:       $dataset"
-    echo "  problem:       $problem"
-    echo "  alpha:         $alpha"
-    echo "  steps_pnp:     $steps_pnp"
-    echo "  num_samples:   $num_samples"
-    echo "  start_batch:   $start_batch"
-    echo "------------------------------------------------------------"
+# ===== celeba / random_inpainting =====
+run "celeba / random_inpainting / pnp_flow_admm[adaptive]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem random_inpainting steps_pnp 100 rho_admm 100 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-    python main.py --opts \
-      dataset "$dataset" \
-      eval_split "$eval_split" \
-      train False \
-      eval True \
-      problem "$problem" \
-      method "$method" \
-      start_batch "$start_batch" \
-      max_batch "$max_batch" \
-      batch_size_ip "$batch_size_ip" \
-      lr_pnp "$lr_pnp" \
-      alpha "$alpha" \
-      num_samples "$num_samples" \
-      steps_pnp "$steps_pnp"
+run "celeba / random_inpainting / pnp_flow_admm[stochastic]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem random_inpainting steps_pnp 100 rho_admm 100 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise False deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
+run "celeba / random_inpainting / pnp_flow_admm[deterministic]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem random_inpainting steps_pnp 100 rho_admm 100 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise False deterministic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / random_inpainting / pnp_flow_fbs" \
+  python main.py --opts method pnp_flow_fbs dataset celeba problem random_inpainting steps_pnp 100 lr_pnp "$LR_PNP" alpha 0.01 num_samples "$NUM_SAMPLES" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / random_inpainting / ot_ode" \
+  python main.py --opts method ot_ode dataset celeba problem random_inpainting steps_ode 100 start_time 0.1 gamma constant model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / random_inpainting / flow_priors" \
+  python main.py --opts method flow_priors dataset celeba problem random_inpainting lmbda 10000 eta 0.01 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / random_inpainting / d_flow" \
+  python main.py --opts method d_flow dataset celeba problem random_inpainting lmbda 0.01 alpha 0.1 max_iter 20 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / random_inpainting / flow_dps [UNTUNED]" \
+  python main.py --opts method flow_dps dataset celeba problem random_inpainting steps_ode 100 grad_steps 3 grad_step_size 1.0 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+
+# ===== celeba / superresolution =====
+run "celeba / superresolution / pnp_flow_admm[adaptive]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem superresolution steps_pnp 100 rho_admm 50 beta_rho 1.3 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / superresolution / pnp_flow_admm[stochastic]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem superresolution steps_pnp 100 rho_admm 50 beta_rho 1.3 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise False deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / superresolution / pnp_flow_admm[deterministic]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem superresolution steps_pnp 100 rho_admm 50 beta_rho 1.3 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise False deterministic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / superresolution / pnp_flow_fbs" \
+  python main.py --opts method pnp_flow_fbs dataset celeba problem superresolution steps_pnp 100 lr_pnp "$LR_PNP" alpha 0.3 num_samples "$NUM_SAMPLES" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / superresolution / ot_ode" \
+  python main.py --opts method ot_ode dataset celeba problem superresolution steps_ode 100 start_time 0.1 gamma constant model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / superresolution / flow_priors" \
+  python main.py --opts method flow_priors dataset celeba problem superresolution lmbda 10000 eta 0.1 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / superresolution / d_flow" \
+  python main.py --opts method d_flow dataset celeba problem superresolution lmbda 0.001 alpha 0.1 max_iter 10 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / superresolution / flow_dps [UNTUNED]" \
+  python main.py --opts method flow_dps dataset celeba problem superresolution steps_ode 100 grad_steps 3 grad_step_size 1.0 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+
+# ===== celeba / phase_retrieval =====
+run "celeba / phase_retrieval / pnp_flow_admm[adaptive]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem phase_retrieval steps_pnp 100 rho_admm 1500 beta_rho 1.8 t_schedule_gamma 1.5 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 num_restarts "$NUM_RESTARTS_PHASE_RETRIEVAL" adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / phase_retrieval / pnp_flow_admm[stochastic]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem phase_retrieval steps_pnp 100 rho_admm 1500 beta_rho 1.8 t_schedule_gamma 1.5 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 num_restarts "$NUM_RESTARTS_PHASE_RETRIEVAL" adaptive_noise False deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / phase_retrieval / pnp_flow_admm[deterministic]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem phase_retrieval steps_pnp 100 rho_admm 1500 beta_rho 1.8 t_schedule_gamma 1.5 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 num_restarts "$NUM_RESTARTS_PHASE_RETRIEVAL" adaptive_noise False deterministic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / phase_retrieval / pnp_flow_fbs" \
+  python main.py --opts method pnp_flow_fbs dataset celeba problem phase_retrieval steps_pnp 100 lr_pnp "$LR_PNP" alpha 0.01 num_samples "$NUM_SAMPLES" num_restarts "$NUM_RESTARTS_PHASE_RETRIEVAL" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / phase_retrieval / d_flow [yaml-default, unverified]" \
+  python main.py --opts method d_flow dataset celeba problem phase_retrieval lmbda 0.01 alpha 0.1 max_iter 10 num_restarts "$NUM_RESTARTS_PHASE_RETRIEVAL" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / phase_retrieval / flow_dps [UNTUNED]" \
+  python main.py --opts method flow_dps dataset celeba problem phase_retrieval steps_ode 100 grad_steps 3 grad_step_size 1.0 use_stochastic_noise True num_restarts "$NUM_RESTARTS_PHASE_RETRIEVAL" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+
+# ===== celeba / hdr_reconstruction =====
+run "celeba / hdr_reconstruction / pnp_flow_admm[adaptive]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem hdr_reconstruction steps_pnp 100 rho_admm 100 beta_rho 1.5 t_schedule_gamma 0.2 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / hdr_reconstruction / pnp_flow_admm[stochastic]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem hdr_reconstruction steps_pnp 100 rho_admm 100 beta_rho 1.5 t_schedule_gamma 0.2 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 adaptive_noise False deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / hdr_reconstruction / pnp_flow_admm[deterministic]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem hdr_reconstruction steps_pnp 100 rho_admm 100 beta_rho 1.5 t_schedule_gamma 0.2 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 adaptive_noise False deterministic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / hdr_reconstruction / pnp_flow_fbs" \
+  python main.py --opts method pnp_flow_fbs dataset celeba problem hdr_reconstruction steps_pnp 100 lr_pnp "$LR_PNP" alpha 0.5 num_samples "$NUM_SAMPLES" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / hdr_reconstruction / d_flow [yaml-default, unverified]" \
+  python main.py --opts method d_flow dataset celeba problem hdr_reconstruction lmbda 0.01 alpha 0.1 max_iter 10 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / hdr_reconstruction / flow_dps [UNTUNED]" \
+  python main.py --opts method flow_dps dataset celeba problem hdr_reconstruction steps_ode 100 grad_steps 3 grad_step_size 1.0 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+
+# ===== celeba / nonlinear_deblurring =====
+run "celeba / nonlinear_deblurring / pnp_flow_admm[adaptive]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem nonlinear_deblurring steps_pnp 500 rho_admm 100 beta_rho 1.5 t_schedule_gamma 1.5 num_denoiser_calls 1 save_norms_admm False early_stopping True max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 nonlinear_blur_checkpoint "$NONLINEAR_BLUR_CKPT" adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / nonlinear_deblurring / pnp_flow_admm[stochastic]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem nonlinear_deblurring steps_pnp 500 rho_admm 100 beta_rho 1.5 t_schedule_gamma 1.5 num_denoiser_calls 1 save_norms_admm False early_stopping True max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 nonlinear_blur_checkpoint "$NONLINEAR_BLUR_CKPT" adaptive_noise False deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / nonlinear_deblurring / pnp_flow_admm[deterministic]" \
+  python main.py --opts method pnp_flow_admm dataset celeba problem nonlinear_deblurring steps_pnp 500 rho_admm 100 beta_rho 1.5 t_schedule_gamma 1.5 num_denoiser_calls 1 save_norms_admm False early_stopping True max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 nonlinear_blur_checkpoint "$NONLINEAR_BLUR_CKPT" adaptive_noise False deterministic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / nonlinear_deblurring / pnp_flow_fbs" \
+  python main.py --opts method pnp_flow_fbs dataset celeba problem nonlinear_deblurring steps_pnp 500 lr_pnp "$LR_PNP" alpha 0.5 num_samples "$NUM_SAMPLES" nonlinear_blur_checkpoint "$NONLINEAR_BLUR_CKPT" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / nonlinear_deblurring / d_flow [yaml-default, unverified]" \
+  python main.py --opts method d_flow dataset celeba problem nonlinear_deblurring lmbda 0.01 alpha 0.1 max_iter 10 nonlinear_blur_checkpoint "$NONLINEAR_BLUR_CKPT" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / nonlinear_deblurring / flow_dps [UNTUNED]" \
+  python main.py --opts method flow_dps dataset celeba problem nonlinear_deblurring steps_ode 500 grad_steps 3 grad_step_size 1.0 use_stochastic_noise True nonlinear_blur_checkpoint "$NONLINEAR_BLUR_CKPT" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+
+# ===== afhq_cat / inpainting =====
+run "afhq_cat / inpainting / pnp_flow_admm[adaptive]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem inpainting steps_pnp 100 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.5 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / inpainting / pnp_flow_admm[stochastic]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem inpainting steps_pnp 100 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.5 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise False deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / inpainting / pnp_flow_admm[deterministic]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem inpainting steps_pnp 100 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.5 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise False deterministic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / inpainting / pnp_flow_fbs" \
+  python main.py --opts method pnp_flow_fbs dataset afhq_cat problem inpainting steps_pnp 100 lr_pnp "$LR_PNP" alpha 0.5 num_samples "$NUM_SAMPLES" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / inpainting / ot_ode" \
+  python main.py --opts method ot_ode dataset afhq_cat problem inpainting steps_ode 100 start_time 0.1 gamma gamma_t model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / inpainting / flow_priors" \
+  python main.py --opts method flow_priors dataset afhq_cat problem inpainting lmbda 10000 eta 0.01 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / inpainting / d_flow" \
+  python main.py --opts method d_flow dataset afhq_cat problem inpainting lmbda 0.01 alpha 0.1 max_iter 9 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / inpainting / flow_dps [UNTUNED]" \
+  python main.py --opts method flow_dps dataset afhq_cat problem inpainting steps_ode 100 grad_steps 3 grad_step_size 1.0 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+
+# ===== afhq_cat / random_inpainting =====
+run "afhq_cat / random_inpainting / pnp_flow_admm[adaptive]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem random_inpainting steps_pnp 100 rho_admm 100 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / random_inpainting / pnp_flow_admm[stochastic]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem random_inpainting steps_pnp 100 rho_admm 100 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise False deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / random_inpainting / pnp_flow_admm[deterministic]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem random_inpainting steps_pnp 100 rho_admm 100 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise False deterministic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / random_inpainting / pnp_flow_fbs" \
+  python main.py --opts method pnp_flow_fbs dataset afhq_cat problem random_inpainting steps_pnp 100 lr_pnp "$LR_PNP" alpha 0.01 num_samples "$NUM_SAMPLES" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / random_inpainting / ot_ode" \
+  python main.py --opts method ot_ode dataset afhq_cat problem random_inpainting steps_ode 100 start_time 0.1 gamma constant model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / random_inpainting / flow_priors" \
+  python main.py --opts method flow_priors dataset afhq_cat problem random_inpainting lmbda 10000 eta 0.01 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / random_inpainting / d_flow" \
+  python main.py --opts method d_flow dataset afhq_cat problem random_inpainting lmbda 0.001 alpha 0.1 max_iter 20 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / random_inpainting / flow_dps [UNTUNED]" \
+  python main.py --opts method flow_dps dataset afhq_cat problem random_inpainting steps_ode 100 grad_steps 3 grad_step_size 1.0 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+
+# ===== afhq_cat / superresolution =====
+run "afhq_cat / superresolution / pnp_flow_admm[adaptive]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem superresolution steps_pnp 100 rho_admm 50 beta_rho 1.3 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / superresolution / pnp_flow_admm[stochastic]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem superresolution steps_pnp 100 rho_admm 50 beta_rho 1.3 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise False deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / superresolution / pnp_flow_admm[deterministic]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem superresolution steps_pnp 100 rho_admm 50 beta_rho 1.3 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 adaptive_noise False deterministic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / superresolution / pnp_flow_fbs" \
+  python main.py --opts method pnp_flow_fbs dataset afhq_cat problem superresolution steps_pnp 100 lr_pnp "$LR_PNP" alpha 0.01 num_samples "$NUM_SAMPLES" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / superresolution / ot_ode" \
+  python main.py --opts method ot_ode dataset afhq_cat problem superresolution steps_ode 100 start_time 0.1 gamma constant model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / superresolution / flow_priors" \
+  python main.py --opts method flow_priors dataset afhq_cat problem superresolution lmbda 10000 eta 0.1 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / superresolution / d_flow" \
+  python main.py --opts method d_flow dataset afhq_cat problem superresolution lmbda 0.001 alpha 0.1 max_iter 20 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / superresolution / flow_dps [UNTUNED]" \
+  python main.py --opts method flow_dps dataset afhq_cat problem superresolution steps_ode 100 grad_steps 3 grad_step_size 1.0 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+
+# ===== afhq_cat / phase_retrieval =====
+run "afhq_cat / phase_retrieval / pnp_flow_admm[adaptive]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem phase_retrieval steps_pnp 100 rho_admm 1500 beta_rho 0.4 t_schedule_gamma 1.5 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 num_restarts "$NUM_RESTARTS_PHASE_RETRIEVAL" adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / phase_retrieval / pnp_flow_admm[stochastic]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem phase_retrieval steps_pnp 100 rho_admm 1500 beta_rho 0.4 t_schedule_gamma 1.5 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 num_restarts "$NUM_RESTARTS_PHASE_RETRIEVAL" adaptive_noise False deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / phase_retrieval / pnp_flow_admm[deterministic]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem phase_retrieval steps_pnp 100 rho_admm 1500 beta_rho 0.4 t_schedule_gamma 1.5 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 num_restarts "$NUM_RESTARTS_PHASE_RETRIEVAL" adaptive_noise False deterministic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / phase_retrieval / pnp_flow_fbs" \
+  python main.py --opts method pnp_flow_fbs dataset afhq_cat problem phase_retrieval steps_pnp 100 lr_pnp "$LR_PNP" alpha 0.01 num_samples "$NUM_SAMPLES" num_restarts "$NUM_RESTARTS_PHASE_RETRIEVAL" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / phase_retrieval / d_flow [yaml-default, unverified]" \
+  python main.py --opts method d_flow dataset afhq_cat problem phase_retrieval lmbda 0.01 alpha 0.1 max_iter 10 num_restarts "$NUM_RESTARTS_PHASE_RETRIEVAL" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / phase_retrieval / flow_dps [UNTUNED]" \
+  python main.py --opts method flow_dps dataset afhq_cat problem phase_retrieval steps_ode 100 grad_steps 3 grad_step_size 1.0 use_stochastic_noise True num_restarts "$NUM_RESTARTS_PHASE_RETRIEVAL" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+
+# ===== afhq_cat / hdr_reconstruction =====
+run "afhq_cat / hdr_reconstruction / pnp_flow_admm[adaptive]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem hdr_reconstruction steps_pnp 100 rho_admm 500 beta_rho 1.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / hdr_reconstruction / pnp_flow_admm[stochastic]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem hdr_reconstruction steps_pnp 100 rho_admm 500 beta_rho 1.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 adaptive_noise False deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / hdr_reconstruction / pnp_flow_admm[deterministic]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem hdr_reconstruction steps_pnp 100 rho_admm 500 beta_rho 1.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 adaptive_noise False deterministic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / hdr_reconstruction / pnp_flow_fbs" \
+  python main.py --opts method pnp_flow_fbs dataset afhq_cat problem hdr_reconstruction steps_pnp 100 lr_pnp "$LR_PNP" alpha 0.5 num_samples "$NUM_SAMPLES" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / hdr_reconstruction / d_flow [yaml-default, unverified]" \
+  python main.py --opts method d_flow dataset afhq_cat problem hdr_reconstruction lmbda 0.01 alpha 0.1 max_iter 10 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / hdr_reconstruction / flow_dps [UNTUNED]" \
+  python main.py --opts method flow_dps dataset afhq_cat problem hdr_reconstruction steps_ode 100 grad_steps 3 grad_step_size 1.0 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+
+# ===== afhq_cat / nonlinear_deblurring =====
+run "afhq_cat / nonlinear_deblurring / pnp_flow_admm[adaptive]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem nonlinear_deblurring steps_pnp 500 rho_admm 100 beta_rho 1.5 t_schedule_gamma 1.5 num_denoiser_calls 1 save_norms_admm False early_stopping True max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 nonlinear_blur_checkpoint "$NONLINEAR_BLUR_CKPT" adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / nonlinear_deblurring / pnp_flow_admm[stochastic]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem nonlinear_deblurring steps_pnp 500 rho_admm 100 beta_rho 1.5 t_schedule_gamma 1.5 num_denoiser_calls 1 save_norms_admm False early_stopping True max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 nonlinear_blur_checkpoint "$NONLINEAR_BLUR_CKPT" adaptive_noise False deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / nonlinear_deblurring / pnp_flow_admm[deterministic]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem nonlinear_deblurring steps_pnp 500 rho_admm 100 beta_rho 1.5 t_schedule_gamma 1.5 num_denoiser_calls 1 save_norms_admm False early_stopping True max_cgiter 10 cg_tol 1e-5 admm_gd_steps 10 nonlinear_blur_checkpoint "$NONLINEAR_BLUR_CKPT" adaptive_noise False deterministic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / nonlinear_deblurring / pnp_flow_fbs" \
+  python main.py --opts method pnp_flow_fbs dataset afhq_cat problem nonlinear_deblurring steps_pnp 500 lr_pnp "$LR_PNP" alpha 0.5 num_samples "$NUM_SAMPLES" nonlinear_blur_checkpoint "$NONLINEAR_BLUR_CKPT" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / nonlinear_deblurring / d_flow [yaml-default, unverified]" \
+  python main.py --opts method d_flow dataset afhq_cat problem nonlinear_deblurring lmbda 0.01 alpha 0.1 max_iter 10 nonlinear_blur_checkpoint "$NONLINEAR_BLUR_CKPT" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / nonlinear_deblurring / flow_dps [UNTUNED]" \
+  python main.py --opts method flow_dps dataset afhq_cat problem nonlinear_deblurring steps_ode 500 grad_steps 3 grad_step_size 1.0 use_stochastic_noise True nonlinear_blur_checkpoint "$NONLINEAR_BLUR_CKPT" model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+printf '\n============================================================\n'
+printf 'All runs finished. Total=%d Failed=%d\n' "$TOTAL" "$FAILED"
+if [[ "$FAILED" -gt 0 ]]; then
+  printf 'Failed runs:\n'
+  for label in "${FAILED_LABELS[@]}"; do
+    printf '  - %s\n' "$label"
   done
-done
+  exit 1
+fi

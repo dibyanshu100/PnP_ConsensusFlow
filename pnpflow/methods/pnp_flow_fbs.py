@@ -102,12 +102,7 @@ class PNP_FLOW_FBS(object):
             if self.args.compute_memory:
                 torch.cuda.reset_max_memory_allocated(self.device)
 
-            # Multiple random restarts per image, keeping whichever restart
-            # has the lowest final data residual ||H(x)-y||. Defaults to 1
-            # (i.e. the exact prior single-shot behavior, byte-for-byte,
-            # since the RNG is untouched in that case) for every problem
-            # except phase_retrieval -- see conversation. Override with
-            # `--opts num_restarts N`.
+            # Multiple random restarts for phase retrieval
             num_restarts = int(getattr(self.args, 'num_restarts', 1))
             best_residual = None
             best_x = None

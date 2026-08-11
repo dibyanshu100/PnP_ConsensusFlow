@@ -33,15 +33,8 @@ class PNP_FLOW_ADMM(object):
         return x
 
     def rho_schedule(self, rho, t_val):
-        style = getattr(self.args, 'rho_schedule_style')
         beta = float(getattr(self.args, 'beta_rho'))
-
-        if style == 'increasing_power':
-            return rho * (1.0 + t_val) ** beta
-        elif style == 'inverse_power':
-            return rho / (max(1.0 - t_val, 1e-3) ** beta)
-        else:
-            return rho
+        return rho / (max(1.0 - t_val, 1e-3) ** beta)
 
     def admm_x_update(self, x_init, z, u, y, degradation, rho, sigma_noise, max_cgiter=50, cg_tol=1e-6):
         """
@@ -207,8 +200,8 @@ class PNP_FLOW_ADMM(object):
                     print(f"  [restart {restart}/{num_restarts}]")
 
                 # ADMM initialization
-                # x = torch.randn(clean_img.shape, device=self.device)
-                x = H_adj(torch.ones_like(noisy_img)).to(self.device)
+                x = torch.randn(clean_img.shape, device=self.device)
+                # x = H_adj(torch.ones_like(noisy_img)).to(self.device)
                 z = x.clone()
                 u = torch.zeros_like(x)
                 gauss_noise = x.clone()

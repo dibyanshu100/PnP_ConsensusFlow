@@ -26,6 +26,7 @@ from pnpflow.methods.pnp_flow_fbs import PNP_FLOW_FBS
 from pnpflow.methods.d_flow import D_FLOW
 from pnpflow.methods.ot_ode import OT_ODE
 from pnpflow.methods.flow_priors import FLOW_PRIORS
+from pnpflow.methods.flow_dps import FLOW_DPS
 from pnpflow.utils import gaussian_blur, define_model, load_model
 import warnings
 warnings.filterwarnings("ignore")
@@ -204,7 +205,7 @@ def main():
                     'Nonlinear deblurring currently only supports gaussian noise')
             degradation = NonlinearBlur(
                 num_channels=args.num_channels, dim_image=args.dim_image,
-                checkpoint_path=getattr(args, 'nonlinear_blur_checkpoint', None),
+                checkpoint_path=getattr(args, 'nonlinear_blur_checkpoint', 'model/motion_deblur/GOPRO_wVAE.pth'),
                 device=device)
 
         elif args.problem == "phase_retrieval":
@@ -259,6 +260,8 @@ def main():
             method = OT_ODE(model, device, args)
         elif args.method == 'flow_priors':
             method = FLOW_PRIORS(model, device, args)
+        elif args.method == 'flow_dps':
+            method = FLOW_DPS(model, device, args)
         else:
             raise ValueError("The method your entered does not exist")
 
@@ -269,7 +272,7 @@ def main():
             raise ValueError(
                 f"Method '{args.method}' is only implemented for linear forward "
                 f"operators and cannot be run on problem '{args.problem}'. "
-                f"Use pnp_flow_admm, pnp_flow_fbs, or d_flow instead.")
+                f"Use pnp_flow_admm, pnp_flow_fbs,d_flow or flow_dps instead.")
 
         method.run_method(data_loaders, degradation, sigma_noise)
 

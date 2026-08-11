@@ -23,24 +23,24 @@ METHOD="${METHOD:-pnp_flow_admm}"
 read -r -a datasets <<< "${DATASETS:-celeba afhq_cat}"    # afhq_cat
 
 # Example:
-# read -r -a problems <<< "${PROBLEMS:-inpainting paintbrush_inpainting random_inpainting superresolution hdr_reconstruction}"
-read -r -a problems <<< "${PROBLEMS:-superresolution}"
+# read -r -a problems <<< "${PROBLEMS:-inpainting random_inpainting superresolution hdr_reconstruction nonlinear_deblurring phase_retrieval}"
+read -r -a problems <<< "${PROBLEMS:-nonlinear_deblurring}"
 
 # ---------------- Sweep values ----------------
 
 # Example larger sweeps:
-# read -r -a rhos   <<< "${RHOS:-200 500 1000 1500}"
+# read -r -a rhos   <<< "${RHOS:-100 500 1000 1500}"
 # read -r -a gammas <<< "${GAMMAS:-0.2 1.0 1.8}"
 # read -r -a steps  <<< "${STEPS:-200 250 300}"
 
-read -r -a rhos   <<< "${RHOS:-50}"
-read -r -a gammas <<< "${GAMMAS:-1.0}"
-read -r -a steps  <<< "${STEPS:-100}"
-read -r -a num_denoiser_calls <<< "${NUM_DENOISER_CALLS:-5}"
+read -r -a rhos   <<< "${RHOS:-100}"
+read -r -a gammas <<< "${GAMMAS:-1.5}"
+read -r -a steps  <<< "${STEPS:-500}"
+read -r -a num_denoiser_calls <<< "${NUM_DENOISER_CALLS:-1}"
 
 # Only inverse-power schedule is tested.
 read -r -a sch <<< "${SCH:-inverse_power}"
-read -r -a beta_inverse <<< "${BETA_INVERSE:-1.3}"
+read -r -a beta_inverse <<< "${BETA_INVERSE:-1.5}"   # 0.01 1.0 1.5 1.3 2.0
 
 LOG_ROOT="${LOG_ROOT:-sweep_logs/linear_admm}"
 FAILED_FILE="${FAILED_FILE:-${LOG_ROOT}/failed_runs.txt}"

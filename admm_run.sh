@@ -50,11 +50,11 @@ run() {
 }
 
 # CelebA
-# run "celeba / inpainting" \
-#   python main.py --opts method pnp_flow_admm dataset celeba model ot train False eval True eval_split test problem inpainting noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" steps_pnp 100 rho_admm 50 t_schedule_gamma 1.0 beta_rho 2.5 rho_schedule_style inverse_power adaptive_noise True deterministic_noise False save_norms_admm False save_results True early_stopping False compute_time True compute_memory True num_denoiser_calls 5
+run "celeba / inpainting" \
+  python main.py --opts method pnp_flow_admm dataset celeba model ot train False eval True eval_split test problem inpainting noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" steps_pnp 100 rho_admm 50 t_schedule_gamma 1.0 beta_rho 2.5 rho_schedule_style inverse_power adaptive_noise True deterministic_noise False save_norms_admm False save_results True early_stopping False compute_time True compute_memory True num_denoiser_calls 5
 
-# run "celeba / superresolution" \
-#   python main.py --opts method pnp_flow_admm dataset celeba model ot train False eval True eval_split test problem superresolution noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" steps_pnp 100 rho_admm 50 t_schedule_gamma 1.0 beta_rho 0.003 rho_schedule_style inverse_power adaptive_noise True deterministic_noise False save_norms_admm False save_results True early_stopping False compute_time True compute_memory True num_denoiser_calls 5
+run "celeba / superresolution" \
+  python main.py --opts method pnp_flow_admm dataset celeba model ot train False eval True eval_split test problem superresolution noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" steps_pnp 100 rho_admm 50 t_schedule_gamma 1.0 beta_rho 0.003 rho_schedule_style inverse_power adaptive_noise True deterministic_noise False save_norms_admm False save_results True early_stopping False compute_time True compute_memory True num_denoiser_calls 5
 
 run "celeba / random_inpainting" \
   python main.py --opts method pnp_flow_admm dataset celeba model ot train False eval True eval_split test problem random_inpainting noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" steps_pnp 100 rho_admm 100 t_schedule_gamma 1.0 beta_rho 2.5 rho_schedule_style inverse_power adaptive_noise True deterministic_noise False save_norms_admm False save_results True early_stopping False compute_time True compute_memory True num_denoiser_calls 5
