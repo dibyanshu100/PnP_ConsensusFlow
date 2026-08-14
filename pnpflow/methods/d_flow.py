@@ -79,17 +79,19 @@ class D_FLOW(object):
             (clean_img, labels) = next(loader)
             self.args.batch = batch
 
-            noisy_img = H(clean_img.clone().to(self.device))
-            torch.manual_seed(batch)
-            noisy_img += torch.randn_like(noisy_img) * sigma_noise
+            if getattr(degradation, 'is_segmentation', False):
+                # Segmentation's measurement is the frozen segmentator's own
+                # prediction on the clean image
+                with torch.no_grad():
+                    noisy_img = H(clean_img.clone().to(self.device)).argmax(dim=1)
+            else:
+                noisy_img = H(clean_img.clone().to(self.device))
+                torch.manual_seed(batch)
+                noisy_img += torch.randn_like(noisy_img) * sigma_noise
             noisy_img = noisy_img.to(self.device)
             clean_img = clean_img.to('cpu')
 
             x = H_adj(noisy_img.clone()).to(self.device)
-            # Restart-invariant: the backward ODE solve from the (fixed)
-            # adjoint-based estimate doesn't depend on any randomness, so
-            # it's computed once and reused across restarts below rather
-            # than re-solved (expensive) each time.
             z_base = self.inverse_flow_matching(x).to(self.device)
 
             if self.args.compute_time:
@@ -99,21 +101,14 @@ class D_FLOW(object):
             if self.args.compute_memory:
                 torch.cuda.reset_max_memory_allocated(self.device)
 
-            # Multiple random restarts per image, keeping whichever restart
-            # has the lowest final data residual ||H(x)-y||. Defaults to 1
-            # (i.e. the exact prior single-shot behavior, byte-for-byte,
-            # since the RNG is untouched in that case) for every problem
-            # except phase_retrieval -- see conversation. Override with
-            # `--opts num_restarts N`.
+            # Multiple random restarts per image for phase retrieval
             num_restarts = int(getattr(self.args, 'num_restarts', 1))
             best_residual = None
             best_restored = None
 
             for restart in range(num_restarts):
                 if num_restarts > 1:
-                    # Only reseed in multi-restart mode: keeps the
-                    # num_restarts=1 path's RNG sequence identical to before
-                    # this feature existed.
+                    # Only reseed in multi-restart mode
                     torch.manual_seed(1000 * batch + restart)
                     print(f"  [restart {restart}/{num_restarts}]")
 
@@ -137,8 +132,17 @@ class D_FLOW(object):
                         reg = - torch.clamp(self.gaussian(z), min=-1e6, max=1e6) + (
                             d - 1) * torch.log(torch.sqrt(torch.sum(z**2, dim=(1, 2, 3))) + 1e-5)
 
-                        loss = (torch.sum((H(self.forward_flow_matching(z)) -
-                                noisy_img)**2, dim=(1, 2, 3)) + self.args.lmbda * reg).sum()
+                        if getattr(degradation, 'is_segmentation', False):
+                            # Cross-entropy data term instead of squared error
+                            logits = H(self.forward_flow_matching(z))
+                            log_probs = torch.nn.functional.log_softmax(logits, dim=1)
+                            data_term = torch.nn.functional.nll_loss(
+                                log_probs, noisy_img, reduction='sum')
+                        else:
+                            data_term = torch.sum((H(self.forward_flow_matching(z)) -
+                                    noisy_img)**2, dim=(1, 2, 3)).sum()
+
+                        loss = data_term + self.args.lmbda * reg.sum()
                         loss.backward()  # Compute gradients
                         return loss
 
@@ -167,8 +171,13 @@ class D_FLOW(object):
                 z = z.detach().requires_grad_(False)
                 restored_img = self.forward_flow_matching(z.detach())
                 with torch.no_grad():
-                    residual = torch.norm(
-                        (H(restored_img) - noisy_img).reshape(noisy_img.shape[0], -1), dim=1)
+                    if getattr(degradation, 'is_segmentation', False):
+                        residual = torch.nn.functional.cross_entropy(
+                            H(restored_img), noisy_img, reduction='none'
+                        ).flatten(1).mean(dim=1)
+                    else:
+                        residual = torch.norm(
+                            (H(restored_img) - noisy_img).reshape(noisy_img.shape[0], -1), dim=1)
                 if best_residual is None:
                     best_residual = residual
                     best_restored = restored_img.clone()

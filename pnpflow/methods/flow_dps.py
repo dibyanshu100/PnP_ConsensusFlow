@@ -25,10 +25,15 @@ class FLOW_DPS(object):
 
     def grad_datafit(self, z, y, degradation):
         # Same normalization/convention as pnp_flow_fbs.py's grad_datafit:
-        # uses degradation.vjp so this is exact for linear H and an
-        # autograd-based VJP for nonlinear H, without any special-casing
-        # here.
         H = degradation.H
+        if getattr(degradation, 'is_segmentation', False):
+            # Cross-entropy data term instead of squared error
+            with torch.enable_grad():
+                z_req = z.detach().requires_grad_(True)
+                log_probs = torch.nn.functional.log_softmax(H(z_req), dim=1)
+                ce = torch.nn.functional.nll_loss(log_probs, y, reduction='sum')
+                grad = torch.autograd.grad(ce, z_req)[0]
+            return grad.detach()
         if self.args.noise_type == 'gaussian':
             return degradation.vjp(z, H(z) - y) / (self.args.sigma_noise**2)
         elif self.args.noise_type == 'laplace':
@@ -64,16 +69,20 @@ class FLOW_DPS(object):
             (clean_img, labels) = next(loader)
             self.args.batch = batch
 
-            noisy_img = H(clean_img.clone().to(self.device))
-            torch.manual_seed(batch)
-            if self.args.noise_type == 'gaussian':
-                noisy_img += torch.randn_like(noisy_img) * sigma_noise
-            elif self.args.noise_type == 'laplace':
-                noise = torch.distributions.laplace.Laplace(
-                    torch.zeros_like(noisy_img), sigma_noise * torch.ones_like(noisy_img)).sample()
-                noisy_img += noise.to(self.device)
+            if getattr(degradation, 'is_segmentation', False):
+                with torch.no_grad():
+                    noisy_img = H(clean_img.clone().to(self.device)).argmax(dim=1)
             else:
-                raise ValueError('Noise type not supported')
+                noisy_img = H(clean_img.clone().to(self.device))
+                torch.manual_seed(batch)
+                if self.args.noise_type == 'gaussian':
+                    noisy_img += torch.randn_like(noisy_img) * sigma_noise
+                elif self.args.noise_type == 'laplace':
+                    noise = torch.distributions.laplace.Laplace(
+                        torch.zeros_like(noisy_img), sigma_noise * torch.ones_like(noisy_img)).sample()
+                    noisy_img += noise.to(self.device)
+                else:
+                    raise ValueError('Noise type not supported')
             noisy_img = noisy_img.to(self.device)
             clean_img = clean_img.to('cpu')
             x_shape_ref = H_adj(torch.zeros_like(noisy_img)).to(self.device)
@@ -145,8 +154,13 @@ class FLOW_DPS(object):
                         time_per_batch += time_counter_2 - time_counter_1
 
                 with torch.no_grad():
-                    residual = torch.norm(
-                        (H(x) - noisy_img).reshape(noisy_img.shape[0], -1), dim=1)
+                    if getattr(degradation, 'is_segmentation', False):
+                        residual = torch.nn.functional.cross_entropy(
+                            H(x), noisy_img, reduction='none'
+                        ).flatten(1).mean(dim=1)
+                    else:
+                        residual = torch.norm(
+                            (H(x) - noisy_img).reshape(noisy_img.shape[0], -1), dim=1)
                 if best_residual is None:
                     best_residual = residual
                     best_x = x.clone()

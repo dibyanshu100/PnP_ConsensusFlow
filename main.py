@@ -1,4 +1,5 @@
 import os
+import sys
 import argparse
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # os.environ["WORLD_SIZE"] = "1"
@@ -148,7 +149,7 @@ def main():
             if hasattr(args, 'box_mask_half_size'):
                 half_size_mask = int(args.box_mask_half_size)
             elif args.dim_image == 128:
-                half_size_mask = 30  #30 #20
+                half_size_mask = 30   #30 #20
             elif args.dim_image == 256:
                 half_size_mask = 60   #60 #40
             degradation = BoxInpainting(half_size_mask)
@@ -230,6 +231,48 @@ def main():
             degradation = HDRReconstruction(
                 scale=getattr(args, 'hdr_scale', 2.0))
 
+        elif args.problem == "segmentation":
+            if args.dim_image != 128:
+                raise ValueError(
+                    'Segmentation currently only supports dim_image=128 (CelebAMask-HQ)')
+            sigma_noise = 0.0  # unused: segmentation's data term is CE, not Gaussian
+            seg_checkpoint = getattr(args, 'segmentation_checkpoint', None)
+            if seg_checkpoint is None:
+                raise ValueError(
+                    "Segmentation requires --opts segmentation_checkpoint <path to "
+                    "the trained segmentator .pt> (PNP_segmentation-main/"
+                    "Segmentator/train_segmentator.py)")
+            degradation = Segmentation(
+                checkpoint_path=seg_checkpoint,
+                num_classes=getattr(args, 'seg_num_classes', 19),
+                dim_image=args.dim_image,
+                base_channels=getattr(args, 'seg_base_channels', 64),
+                device=device)
+
+            prior_checkpoint = getattr(args, 'segmentation_prior_checkpoint', None)
+            if prior_checkpoint is None:
+                raise ValueError(
+                    "Segmentation requires --opts segmentation_prior_checkpoint "
+                    "<path to the trained FM_prior checkpoint> (PNP_segmentation-"
+                    "main/FM_prior/train_prior.py)")
+            from pnpflow.nonlinear_ops.segmentation_task.prior_net import UNet as _SegPriorUNet
+            model = _SegPriorUNet(
+                input_channels=3, input_height=args.dim_image, ch=32,
+                ch_mult=(1, 2, 4, 8), num_res_blocks=6, attn_resolutions=(16, 8),
+                resamp_with_conv=True).to(device)
+            _ckpt = torch.load(prior_checkpoint, map_location=device)
+            if isinstance(_ckpt, dict) and "ema" in _ckpt:
+                model.load_state_dict(_ckpt["ema"])
+            elif isinstance(_ckpt, dict) and "model" in _ckpt:
+                model.load_state_dict(_ckpt["model"])
+            else:
+                model.load_state_dict(_ckpt)
+            model.eval()
+            if args.model != "ot":
+                raise ValueError(
+                    "Segmentation's prior uses the 'ot' calling convention "
+                    "(model(x, t)) -- run with --opts model ot")
+
         else:
             raise ValueError(
                 "Unknown problem '{}'".format(args.problem))
@@ -273,6 +316,16 @@ def main():
                 f"Method '{args.method}' is only implemented for linear forward "
                 f"operators and cannot be run on problem '{args.problem}'. "
                 f"Use pnp_flow_admm, pnp_flow_fbs,d_flow or flow_dps instead.")
+
+        if getattr(degradation, 'is_segmentation', False) and args.method not in (
+                'pnp_flow_admm', 'pnp_flow_fbs', 'd_flow', 'flow_dps'):
+            # Segmentation's cross-entropy data term needed dedicated code
+            # paths (PNP_FLOW_ADMM.solve_ip_segmentation, and CE branches in
+            # grad_datafit/the D-Flow closure/FLOW_DPS.grad_datafit);
+            # OT-ODE/Flow-Priors were not extended to it.
+            raise ValueError(
+                "Segmentation is currently only implemented for methods "
+                "'pnp_flow_admm', 'pnp_flow_fbs', 'd_flow', and 'flow_dps'.")
 
         method.run_method(data_loaders, degradation, sigma_noise)
 

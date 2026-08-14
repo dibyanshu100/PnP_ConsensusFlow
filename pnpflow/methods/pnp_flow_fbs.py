@@ -40,6 +40,14 @@ class PNP_FLOW_FBS(object):
         # unchanged for both linear H (vjp == H_adj(v), exact and cheap) and
         # nonlinear H (vjp computed via autograd).
         H = degradation.H
+        if getattr(degradation, 'is_segmentation', False):
+            # Cross-entropy data term instead of squared error for segmentation
+            with torch.enable_grad():
+                x_req = x.detach().requires_grad_(True)
+                log_probs = torch.nn.functional.log_softmax(H(x_req), dim=1)
+                ce = torch.nn.functional.nll_loss(log_probs, y, reduction='sum')
+                grad = torch.autograd.grad(ce, x_req)[0]
+            return grad.detach()
         if self.args.noise_type == 'gaussian':
             return degradation.vjp(x, H(x) - y) / (self.args.sigma_noise**2)
         elif self.args.noise_type == 'laplace':
@@ -80,7 +88,12 @@ class PNP_FLOW_FBS(object):
             self.args.batch = batch
             print(clean_img.shape)
 
-            if self.args.noise_type == 'gaussian':
+            if getattr(degradation, 'is_segmentation', False):
+                # Segmentation's measurement is the frozen segmentator's own
+                # prediction on the clean image (argmax class map)
+                with torch.no_grad():
+                    noisy_img = H(clean_img.clone().to(self.device)).argmax(dim=1)
+            elif self.args.noise_type == 'gaussian':
                 noisy_img = H(clean_img.clone().to(self.device))
                 torch.manual_seed(batch)
                 noisy_img += torch.randn_like(noisy_img) * sigma_noise
@@ -174,8 +187,13 @@ class PNP_FLOW_FBS(object):
                 # Score this restart by its final data residual, per image,
                 # and keep whichever restart is best for each image so far.
                 with torch.no_grad():
-                    residual = torch.norm(
-                        (H(x) - noisy_img).reshape(noisy_img.shape[0], -1), dim=1)
+                    if getattr(degradation, 'is_segmentation', False):
+                        residual = torch.nn.functional.cross_entropy(
+                            H(x), noisy_img, reduction='none'
+                        ).flatten(1).mean(dim=1)
+                    else:
+                        residual = torch.norm(
+                            (H(x) - noisy_img).reshape(noisy_img.shape[0], -1), dim=1)
                 if best_residual is None:
                     best_residual = residual
                     best_x = x.clone()

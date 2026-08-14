@@ -434,20 +434,6 @@ def save_images(clean_img, noisy_img, rec_img, args, H_adj, iter='final'):
 
     clean_img = postprocess(clean_img.clone(), args)
     if args.problem == 'phase_retrieval':
-        # Two display-only fixes on top of the raw magnitude (the actual
-        # measurement/H/vjp math is untouched by any of this):
-        #  1. fftshift centers the low frequencies in the middle of the
-        #     image (the classic diamond/cross look) instead of splitting
-        #     them across the four corners, which is where our unshifted
-        #     FFT convention puts them.
-        #  2. A real image's Fourier magnitude is dominated by one huge
-        #     DC/low-frequency peak (~1000x the median, verified) --
-        #     plain linear min-max crushes ~90%+ of pixels to black.
-        #     Power-law compression (|F|^0.2, the standard convention for
-        #     displaying any magnitude spectrum -- e.g. MATLAB's
-        #     imshow(abs(F).^0.2)) is what a log-only compression still
-        #     wasn't strong enough for; it's scale-invariant so it doesn't
-        #     need a tuned constant the way log1p(c*y) would.
         noisy_img_raw = torch.fft.fftshift(noisy_img.clone(), dim=(-2, -1))
         noisy_img_raw = noisy_img_raw.clamp(min=0) ** 0.2
         b = noisy_img_raw.shape[0]
@@ -455,6 +441,14 @@ def save_images(clean_img, noisy_img, rec_img, args, H_adj, iter='final'):
         mn = flat.min(dim=1, keepdim=True)[0]
         mx = flat.max(dim=1, keepdim=True)[0]
         noisy_img = ((flat - mn) / (mx - mn + 1e-12)).view_as(noisy_img_raw)
+    elif args.problem == 'segmentation':
+        # noisy_img here is a per-pixel class-label map [B,H,W] (no channeldim, integer-valued)
+        mask = noisy_img.clone().long()
+        num_classes = int(getattr(args, 'seg_num_classes', 19))
+        cmap = plt.get_cmap('tab20', num_classes)
+        palette = torch.tensor([cmap(i)[:3] for i in range(num_classes)],
+                               dtype=torch.float32, device=mask.device)
+        noisy_img = palette[mask].permute(0, 3, 1, 2)  # [B,3,H,W], already in [0,1]
     else:
         noisy_img = postprocess(noisy_img.clone(), args)
     rec_img = postprocess(rec_img.clone(), args)
@@ -541,7 +535,7 @@ def save_images(clean_img, noisy_img, rec_img, args, H_adj, iter='final'):
             print('Saving images one by one')
             for i in range(batch_size):
 
-                if args.problem in ('superresolution', 'superresolution_bicubic', 'phase_retrieval'):
+                if args.problem in ('superresolution', 'superresolution_bicubic', 'phase_retrieval', 'segmentation'):
                     psnr_noisy = PSNR(
                         clean_img[i], H_adj_noisy_img[i], data_range=1.)
                 else:
@@ -625,7 +619,7 @@ def compute_psnr(clean_img, noisy_img, rec_img, args, H_adj, iter='final'):
     H_adj_noisy_img = postprocess(H_adj(noisy_img), args)
 
     clean_img = clean_img.permute(0, 2, 3, 1).cpu().data
-    if args.problem in ('superresolution', 'superresolution_bicubic', 'phase_retrieval'):
+    if args.problem in ('superresolution', 'superresolution_bicubic', 'phase_retrieval', 'segmentation'):
         noisy_img = H_adj_noisy_img.permute(0, 2, 3, 1).cpu().data
     else:
         noisy_img = noisy_img.permute(0, 2, 3, 1).cpu().data
@@ -719,7 +713,7 @@ def compute_lpips(clean_img, noisy_img, rec_img, args, H_adj, iter='final'):
     clean_img = clean_img.to(DEVICE)
     rec_img = rec_img.to(DEVICE)
 
-    if args.problem in ['superresolution', 'superresolution_bicubic', 'phase_retrieval']:
+    if args.problem in ['superresolution', 'superresolution_bicubic', 'phase_retrieval', 'segmentation']:
         noisy_img = H_adj_noisy_img.to(DEVICE)
     else:
         noisy_img = noisy_img.to(DEVICE)
@@ -811,7 +805,7 @@ def compute_ssim(clean_img, noisy_img, rec_img, args, H_adj, iter='final'):
     rec_img = postprocess(rec_img.clone(), args).cpu()
 
     # Convert images to the appropriate format for SSIM calculation
-    if args.problem in ('superresolution', 'superresolution_bicubic', 'phase_retrieval'):
+    if args.problem in ('superresolution', 'superresolution_bicubic', 'phase_retrieval', 'segmentation'):
         noisy_img = H_adj_noisy_img
     else:
         noisy_img = noisy_img

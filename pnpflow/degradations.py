@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn.functional as F
 from pnpflow.utils import square_mask, random_mask, paintbrush_mask, gaussian_blur, gaussian_2d_kernel, downsample, upsample, bicubic_filter, create_downsampling_matrix
+from pnpflow.nonlinear_ops.segmentation_task.segmentator_net import build_model as _build_segmentator
 
 
 class Degradation:
@@ -169,10 +170,6 @@ _KERNEL_WIZARD_OPT = {
 
 def _load_kernel_wizard():
     """Imports the vendored BKSE KernelWizard class.
-
-    KernelWizard's own source uses absolute imports (`import models.arch_util`),
-    so the vendored `bkse/` directory -- not its parent -- must be on
-    sys.path, exactly as required when using the official BKSE repo directly.
     """
     import os
     import sys
@@ -272,3 +269,30 @@ class HDRReconstruction(Degradation):
     def H_adj(self, y):
         # Display/initialization stand-in only -- see class docstring.
         return y / self.scale
+
+
+class Segmentation(Degradation):
+    is_linear = False
+    is_segmentation = True
+
+    def __init__(self, checkpoint_path, num_classes=19, dim_image=128,
+                 base_channels=64, device="cuda"):
+        super().__init__()
+        self.device = device
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        num_classes = checkpoint.get("num_classes", num_classes)
+        base_channels = checkpoint.get("base_channels", base_channels)
+        self.num_classes = int(num_classes)
+        self.net = _build_segmentator(num_classes=self.num_classes, in_channels=3,
+                                      base_channels=base_channels).to(device)
+        self.net.load_state_dict(checkpoint["model_state_dict"])
+        self.net.eval()
+        for p in self.net.parameters():
+            p.requires_grad_(False)
+
+    def H(self, x):
+        return self.net(x.to(self.device))
+
+    def H_adj(self, y):
+        b, h, w = y.shape[0], y.shape[-2], y.shape[-1]
+        return torch.zeros(b, 3, h, w, device=y.device)
