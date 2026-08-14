@@ -148,9 +148,9 @@ def main():
             if hasattr(args, 'box_mask_half_size'):
                 half_size_mask = int(args.box_mask_half_size)
             elif args.dim_image == 128:
-                half_size_mask = 20   #30 #20
+                half_size_mask = 30  #30 #20
             elif args.dim_image == 256:
-                half_size_mask = 40   #60 #40
+                half_size_mask = 60   #60 #40
             degradation = BoxInpainting(half_size_mask)
 
         elif args.problem == "paintbrush_inpainting":
