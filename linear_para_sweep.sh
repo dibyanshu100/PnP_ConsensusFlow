@@ -20,11 +20,11 @@ MODEL="${MODEL:-ot}"
 METHOD="${METHOD:-pnp_flow_admm}"
 
 # Space-separated lists may be overridden from the shell.
-read -r -a datasets <<< "${DATASETS:-celeba afhq_cat}"    # afhq_cat
+read -r -a datasets <<< "${DATASETS:-afhq_cat}"    # afhq_cat
 
 # Example:
 # read -r -a problems <<< "${PROBLEMS:-inpainting random_inpainting superresolution hdr_reconstruction nonlinear_deblurring phase_retrieval}"
-read -r -a problems <<< "${PROBLEMS:-nonlinear_deblurring}"
+read -r -a problems <<< "${PROBLEMS:-phase_retrieval}"
 
 # ---------------- Sweep values ----------------
 
@@ -33,14 +33,14 @@ read -r -a problems <<< "${PROBLEMS:-nonlinear_deblurring}"
 # read -r -a gammas <<< "${GAMMAS:-0.2 1.0 1.8}"
 # read -r -a steps  <<< "${STEPS:-200 250 300}"
 
-read -r -a rhos   <<< "${RHOS:-100}"
-read -r -a gammas <<< "${GAMMAS:-1.5}"
-read -r -a steps  <<< "${STEPS:-500}"
-read -r -a num_denoiser_calls <<< "${NUM_DENOISER_CALLS:-1}"
+read -r -a rhos   <<< "${RHOS:-1500}"
+read -r -a gammas <<< "${GAMMAS:-1.9}"
+read -r -a steps  <<< "${STEPS:-300}"
+read -r -a num_denoiser_calls <<< "${NUM_DENOISER_CALLS:-5}"
 
 # Only inverse-power schedule is tested.
 read -r -a sch <<< "${SCH:-inverse_power}"
-read -r -a beta_inverse <<< "${BETA_INVERSE:-1.5}"   # 0.01 1.0 1.5 1.3 2.0
+read -r -a beta_inverse <<< "${BETA_INVERSE:-2.2}"   # 0.01 1.0 1.5 1.3 2.0
 
 LOG_ROOT="${LOG_ROOT:-sweep_logs/linear_admm}"
 FAILED_FILE="${FAILED_FILE:-${LOG_ROOT}/failed_runs.txt}"

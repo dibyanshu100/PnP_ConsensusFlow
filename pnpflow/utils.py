@@ -210,17 +210,14 @@ def load_model(name_model, model, state, download=False, checkpoint_path=None, d
     if name_model == "ot":
         if download:
             assert dataset is not None
-            import gdown
-            dict_ids = {"celeba": "1ZZ6S-PGRx-tOPkr4Gt3A6RN-PChabnD6",
-                        "afhq_cat": "1FpD3cYpgtM8-KJ3Qk48fcjtr1Ne_IMOF"}
-
             output_path = f"../model/{dataset}/gaussian/ot/"
-            folder = Path(output_path)
-            folder.mkdir(parents=True, exist_ok=True)
-            drive_id = dict_ids[dataset]
-            url = f"https://drive.google.com/uc?id={drive_id}"
-            gdown.download(url, output_path + "model_final.pt", quiet=False)
-            checkpoint_path = output_path + "model_final.pt"
+            checkpoint_path = checkpoint_path or output_path + "model_final.pt"
+            if not os.path.exists(checkpoint_path):
+                raise FileNotFoundError(
+                    f"No checkpoint found at '{checkpoint_path}'. Pretrained "
+                    f"checkpoints are not auto-downloaded in this codebase -- "
+                    f"place your own '{name_model}' checkpoint at this path, "
+                    f"or pass an explicit checkpoint_path.")
 
         model.load_state_dict(torch.load(checkpoint_path, map_location=device))
         model.to(device)

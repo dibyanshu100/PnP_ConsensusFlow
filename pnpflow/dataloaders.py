@@ -15,10 +15,17 @@ import logging
 
 
 class DataLoaders:
-    def __init__(self, dataset_name, batch_size_train, batch_size_test):
+    def __init__(self, dataset_name, batch_size_train, batch_size_test,
+                 celebahq_train_ids=None, celebahq_test_ids=None, dim_image=None):
         self.dataset_name = dataset_name
         self.batch_size_train = batch_size_train
         self.batch_size_test = batch_size_test
+        # Optional paths to id-list files (see CelebAHQDataset) enforcing a 
+        # train/test split for CelebAMask-HQ -- unused for every other
+        # dataset. 
+        self.celebahq_train_ids = celebahq_train_ids
+        self.celebahq_test_ids = celebahq_test_ids
+        self.dim_image = dim_image
 
     def load_data(self):
 
@@ -60,20 +67,32 @@ class DataLoaders:
         elif self.dataset_name == 'celebahq':
 
             transform = v2.Compose([
-                v2.Resize(256),
+                v2.Resize(self.dim_image or 256),
                 v2.ToTensor(),         # Convert images to PyTorch tensor
             ])
 
             test_dir = './data/celebahq/test/'
             test_dataset = CelebAHQDataset(
-                test_dir, batchsize=self.batch_size_test, transform=transform)
-            train_loader = None
-            val_loader = None
+                test_dir, batchsize=self.batch_size_test, transform=transform,
+                split_ids_path=self.celebahq_test_ids)
             test_loader = DataLoader(
                 test_dataset,
                 batch_size=self.batch_size_test,
                 shuffle=False,
                 collate_fn=custom_collate)
+
+            if self.celebahq_train_ids is not None:
+                train_dataset = CelebAHQDataset(
+                    test_dir, batchsize=self.batch_size_train, transform=transform,
+                    split_ids_path=self.celebahq_train_ids)
+                train_loader = DataLoader(
+                    train_dataset,
+                    batch_size=self.batch_size_train,
+                    shuffle=True,
+                    collate_fn=custom_collate)
+            else:
+                train_loader = None
+            val_loader = None
 
         elif self.dataset_name == 'afhq_cat':
             # transform should include a linear transform 2x - 1
@@ -151,12 +170,23 @@ class CelebADataset(Dataset):
 
 
 class CelebAHQDataset(Dataset):
-    """CelebA HQ dataset."""
-
-    def __init__(self, data_dir, batchsize, transform=None):
-        self.files = sorted(os.listdir(data_dir))
+    def __init__(self, data_dir, batchsize, transform=None, split_ids_path=None):
+        all_files = sorted(os.listdir(data_dir))
+        if split_ids_path is not None:
+            with open(split_ids_path) as f:
+                allowed_ids = {line.strip() for line in f if line.strip()}
+            self.files = [fn for fn in all_files
+                         if os.path.splitext(fn)[0] in allowed_ids]
+            if len(self.files) == 0:
+                raise ValueError(
+                    f"No files in '{data_dir}' matched any id in "
+                    f"'{split_ids_path}' -- check that filenames look like "
+                    f"'<id>.jpg' (or similar) and that the ids in that file "
+                    f"are correct.")
+        else:
+            self.files = all_files
         self.root_dir = data_dir
-        self.num_imgs = len(os.listdir(self.root_dir))
+        self.num_imgs = len(self.files)
         self.transform = transform
         self.batchsize = batchsize
 

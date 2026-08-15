@@ -90,7 +90,10 @@ def main():
         args.batch_size = args.batch_size_train
         print('Training...')
         data_loaders = DataLoaders(
-            args.dataset, args.batch_size_train, args.batch_size_train).load_data()
+            args.dataset, args.batch_size_train, args.batch_size_train,
+            celebahq_train_ids=getattr(args, 'celebahq_train_ids', None),
+            celebahq_test_ids=getattr(args, 'celebahq_test_ids', None),
+            dim_image=getattr(args, 'dim_image', None)).load_data()
         if args.model == "ot":
             generative_method = FLOW_MATCHING(model, device, args)
         elif args.model == "gradient_step":
@@ -103,23 +106,24 @@ def main():
 
     if args.eval:
 
-        if args.model == "ot" or args.model == "gradient_step":
-            model_path = args.root + \
-                'model/{}/{}/model_final.pt'.format(
+        if args.problem != "segmentation":
+            if args.model == "ot" or args.model == "gradient_step":
+                model_path = args.root + \
+                    'model/{}/{}/model_final.pt'.format(
+                        args.dataset, args.model)
+                load_model(args.model, model, state, download=False,
+                           checkpoint_path=model_path, dataset=None,  device=device)
+                model.eval()
+
+            elif args.model == "rectified":
+                model_path = args.root + 'model/{}/{}/model_final.pth'.format(
                     args.dataset, args.model)
-            load_model(args.model, model, state, download=False,
-                       checkpoint_path=model_path, dataset=None,  device=device)
-            model.eval()
+                load_model(args.model, model, state, download=False,
+                           checkpoint_path=model_path, dataset=None, device=device)
+                model.eval()
 
-        elif args.model == "rectified":
-            model_path = args.root + 'model/{}/{}/model_final.pth'.format(
-                args.dataset, args.model)
-            load_model(args.model, model, state, download=False,
-                       checkpoint_path=model_path, dataset=None, device=device)
-            model.eval()
-
-        elif args.model == "diffusion":
-            model.eval()
+            elif args.model == "diffusion":
+                model.eval()
 
         if args.model == "gradient_step":
             generative_method = GRADIENT_STEP_DENOISER(model, device, args)
@@ -232,16 +236,14 @@ def main():
                 scale=getattr(args, 'hdr_scale', 2.0))
 
         elif args.problem == "segmentation":
+            if args.dataset != 'celebahq':
+                raise ValueError(
+                    "Segmentation requires dataset celebahq")
             if args.dim_image != 128:
                 raise ValueError(
                     'Segmentation currently only supports dim_image=128 (CelebAMask-HQ)')
             sigma_noise = 0.0  # unused: segmentation's data term is CE, not Gaussian
-            seg_checkpoint = getattr(args, 'segmentation_checkpoint', None)
-            if seg_checkpoint is None:
-                raise ValueError(
-                    "Segmentation requires --opts segmentation_checkpoint <path to "
-                    "the trained segmentator .pt> (PNP_segmentation-main/"
-                    "Segmentator/train_segmentator.py)")
+            seg_checkpoint = getattr(args, 'segmentation_checkpoint', 'model/celebahq/segmentation/celebahq_segmentator.pt')
             degradation = Segmentation(
                 checkpoint_path=seg_checkpoint,
                 num_classes=getattr(args, 'seg_num_classes', 19),
@@ -249,12 +251,7 @@ def main():
                 base_channels=getattr(args, 'seg_base_channels', 64),
                 device=device)
 
-            prior_checkpoint = getattr(args, 'segmentation_prior_checkpoint', None)
-            if prior_checkpoint is None:
-                raise ValueError(
-                    "Segmentation requires --opts segmentation_prior_checkpoint "
-                    "<path to the trained FM_prior checkpoint> (PNP_segmentation-"
-                    "main/FM_prior/train_prior.py)")
+            prior_checkpoint = getattr(args, 'segmentation_prior_checkpoint', 'model/celebahq/segmentation/prior_model_final_checkpoint.pt')
             from pnpflow.nonlinear_ops.segmentation_task.prior_net import UNet as _SegPriorUNet
             model = _SegPriorUNet(
                 input_channels=3, input_height=args.dim_image, ch=32,
@@ -281,7 +278,10 @@ def main():
             args.problem, args.method))
         print('sigma_noise', sigma_noise)
         data_loaders = DataLoaders(
-            args.dataset, args.batch_size_ip, args.batch_size_ip).load_data()
+            args.dataset, args.batch_size_ip, args.batch_size_ip,
+            celebahq_train_ids=getattr(args, 'celebahq_train_ids', None),
+            celebahq_test_ids=getattr(args, 'celebahq_test_ids', 'data/celebahq/splits/test_ids.txt'),
+            dim_image=getattr(args, 'dim_image', None)).load_data()
         if args.noise_type == 'laplace':
             args.save_path = os.path.join(
                 args.root, 'results_laplace', args.dataset, args.model, args.problem, args.method, args.eval_split)

@@ -134,7 +134,59 @@ elif [ "$FILE" == "celeba-dataset" ]; then
     echo "  $DEST_DIR/test"
     echo "Partition file created: $PART_FILE"
 
+elif [ "$FILE" == "celebahq-dataset" ]; then
+    if ! command -v kaggle &> /dev/null; then
+        echo "Error: Kaggle API not found."
+        echo "Install it with:"
+        echo "    pip install kaggle"
+        exit 1
+    fi
+ 
+    DEST_DIR=./data/celebahq
+    RAW_DIR="$DEST_DIR/raw"
+    IMG_DIR="$DEST_DIR/test"
+ 
+    echo "Creating dataset directory..."
+    mkdir -p "$RAW_DIR" "$IMG_DIR"
+ 
+    echo "Downloading CelebAMask-HQ from Kaggle..."
+    kaggle datasets download \
+        -d ipythonx/celebamaskhq \
+        -p "$RAW_DIR" \
+        --unzip
+ 
+    echo ""
+    echo "CelebAMask-HQ download complete."
+    echo "Directory structure:"
+    find "$RAW_DIR" -maxdepth 3 -type d
+ 
+    echo ""
+    echo "Locating the face-image folder..."
+    SRC_IMG_DIR=$(find "$RAW_DIR" -type d -iname "CelebA-HQ-img" | head -n 1)
+ 
+    if [ -z "$SRC_IMG_DIR" ]; then
+        echo "Error: could not find a 'CelebA-HQ-img' folder inside the"
+        echo "downloaded dataset (see the directory tree above). Move the"
+        echo "face images (named like 0.jpg ... 29999.jpg) into $IMG_DIR"
+        echo "yourself, then rerun with this dataset already present."
+        exit 1
+    fi
+ 
+    echo "Found images at: $SRC_IMG_DIR"
+    echo "Moving images into $IMG_DIR ..."
+    mv "$SRC_IMG_DIR"/* "$IMG_DIR/"
+ 
+    echo "Cleaning up..."
+    rm -rf "$RAW_DIR"
+ 
+    echo "Done!"
+    echo "Images stored in: $IMG_DIR"
+    echo ""
+    echo "To use train/test splits, place train_ids.txt/test_ids.txt at"
+    echo "$DEST_DIR/splits/ and pass their paths via --opts"
+    echo "celebahq_train_ids <path> celebahq_test_ids <path>"
+ 
 else
-    echo "Available arguments are pretrained-network-celeba, pretrained-network-afhq-cat, celeba-dataset and afhq-cat-dataset."
+    echo "Available arguments are pretrained-network-celeba, pretrained-network-afhq-cat, celeba-dataset, afhq-cat-dataset and celebahq-dataset."
     exit 1
 fi
