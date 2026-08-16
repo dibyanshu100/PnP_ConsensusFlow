@@ -383,17 +383,6 @@ class PNP_FLOW_ADMM(object):
         # Solve the inverse problem
         self.solve_ip(
             data_loaders[self.args.eval_split], degradation, sigma_noise, H_funcs)
-    # =====================================================================
-    # Segmentation problem: ported from the user's own PNP_segmentation-main
-    # project (pnp.py: SegmentationForwardModel.admm_x_update_gd and
-    # NonlinearPNPFlowADMM.solve()). Cross-entropy data term instead of
-    # squared error, so it doesn't reuse admm_x_update/grad_datafit at all.
-    # All hyperparameters below default to that project's own argparse
-    # defaults and are overridable via `--opts seg_<name> <value>`, kept
-    # under a `seg_` prefix specifically so they don't collide with
-    # rho_admm/steps_pnp/etc., which stay at their (very different-scale)
-    # defaults tuned for the other, unrelated problems in this file.
-    # =====================================================================
 
     @staticmethod
     def _seg_build_neighbor_matrix(num_classes, class_neighbors):
@@ -431,6 +420,31 @@ class PNP_FLOW_ADMM(object):
         alpha_map = boundary * alpha + (1.0 - boundary) * alpha_interior
         soft_target = (1.0 - alpha_map) * one_hot + alpha_map * noise_distribution
         return soft_target / soft_target.sum(dim=1, keepdim=True).clamp_min(1e-12)
+
+    @torch.no_grad()
+    def _seg_make_neighbor_soft_target(self, target_mask, alpha, num_classes,
+                                        neighbor_matrix, mask_noise_type, progress=0.0):
+        target_mask = target_mask.detach().long()
+        one_hot = torch.nn.functional.one_hot(target_mask, num_classes=num_classes)
+        one_hot = one_hot.permute(0, 3, 1, 2).float().contiguous()
+        if alpha <= 0.0:
+            return one_hot
+        if mask_noise_type == "neighbor":
+            noise_distribution = torch.einsum("bchw,cd->bdhw", one_hot, neighbor_matrix)
+        elif mask_noise_type == "random":
+            noise_distribution = torch.rand_like(one_hot)
+            noise_distribution = noise_distribution / noise_distribution.sum(dim=1, keepdim=True).clamp_min(1e-12)
+        elif mask_noise_type == "auto":
+            random_distribution = torch.rand_like(one_hot)
+            random_distribution = random_distribution / random_distribution.sum(dim=1, keepdim=True).clamp_min(1e-12)
+            neighbor_distribution = torch.einsum("bchw,cd->bdhw", one_hot, neighbor_matrix)
+            w_neighbor = min(max(float(progress), 0.0), 1.0)
+            noise_distribution = (1.0 - w_neighbor) * random_distribution + w_neighbor * neighbor_distribution
+        else:
+            raise ValueError(f"Unknown seg_mask_noise_type: {mask_noise_type}")
+        soft_target = (1.0 - alpha) * one_hot + alpha * noise_distribution
+        return soft_target / soft_target.sum(dim=1, keepdim=True).clamp_min(1e-12)
+
 
     @staticmethod
     def _seg_get_mask_noise_weight(progress, mask_noise_start, mask_noise_schedule):
@@ -478,9 +492,6 @@ class PNP_FLOW_ADMM(object):
 
     @staticmethod
     def _seg_update_noise(z_tilde, z, t_view, old_shape_like, det_weight):
-        # Only "blend" mode is ported (the only mode the original project's
-        # own main.py actually drives via CLI) -- see pnp.py's
-        # NonlinearPNPFlowADMM._update_noise for the other (unused) modes.
         gauss_noise_1 = (z_tilde - z * t_view) / ((1.0 - t_view) + 1e-12)
         gauss_noise_2 = torch.randn_like(old_shape_like)
         d = float(det_weight)
@@ -555,8 +566,9 @@ class PNP_FLOW_ADMM(object):
         x_lr_decay = float(getattr(a, 'seg_x_lr_decay', 1.0))
         x_inner_steps_min = int(getattr(a, 'seg_x_inner_steps_min', 15))
         x_inner_steps_max = int(getattr(a, 'seg_x_inner_steps_max', 5))
-        steps_pnp = int(getattr(a, 'seg_steps_pnp', 500))
+        steps_pnp = int(getattr(a, 'seg_steps_pnp', 300))
         mask_noise_start = float(getattr(a, 'seg_mask_noise_start', 0.3))
+        mask_noise_type = str(getattr(a, 'seg_mask_noise_type', 'neighbor'))
         mask_noise_schedule = str(getattr(a, 'seg_mask_noise_schedule', 'early_drop'))
         mask_noise_kernel_size = int(getattr(a, 'seg_mask_noise_kernel_size', 5))
         mask_noise_interior_scale = float(getattr(a, 'seg_mask_noise_interior_scale', 0.0))
@@ -612,11 +624,18 @@ class PNP_FLOW_ADMM(object):
                     progress = iteration / max(steps_pnp - 1, 1)
                     mask_noise_weight = self._seg_get_mask_noise_weight(
                         progress, mask_noise_start, mask_noise_schedule)
-                    target_distribution = self._seg_make_local_boundary_soft_target(
-                        target_mask=target_mask, alpha=mask_noise_weight,
-                        num_classes=degradation.num_classes,
-                        kernel_size=mask_noise_kernel_size,
-                        interior_scale=mask_noise_interior_scale)
+                    if mask_noise_type == "boundary":
+                        target_distribution = self._seg_make_local_boundary_soft_target(
+                            target_mask=target_mask, alpha=mask_noise_weight,
+                            num_classes=degradation.num_classes,
+                            kernel_size=mask_noise_kernel_size,
+                            interior_scale=mask_noise_interior_scale)
+                    else:
+                        target_distribution = self._seg_make_neighbor_soft_target(
+                            target_mask=target_mask, alpha=mask_noise_weight,
+                            num_classes=degradation.num_classes,
+                            neighbor_matrix=neighbor_matrix,
+                            mask_noise_type=mask_noise_type, progress=progress)
 
                     inner_steps = int(round(
                         x_inner_steps_min + progress * (x_inner_steps_max - x_inner_steps_min)))

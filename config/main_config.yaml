@@ -15,7 +15,7 @@ EVAL:
     compute_lipschitz: False
     problem: 'superresolution'      # inverse problem type (superresolution, inpainting, denoising)
     method: 'pnp_flow'              # method for solving inverse problem (pnp_flow, map_gd, d_flow)
-    max_batch: 2               # number of batches of size 4 for evaluation
+    max_batch: 1               # number of batches of size 4 for evaluation
     batch_size_ip : 4
     start_batch: 0
     noise_type: 'gaussian'          # noise type for inverse problem (gaussian, poisson))

@@ -262,23 +262,23 @@ run() {
 
 
 # # ===== afhq_cat / phase_retrieval =====
-# run "afhq_cat / phase_retrieval / pnp_flow_admm[adaptive]" \
-#   python main.py --opts method pnp_flow_admm dataset afhq_cat problem phase_retrieval steps_pnp 300 rho_admm 1500 beta_rho 2.2 t_schedule_gamma 1.9 num_denoiser_calls 5 save_norms_admm False early_stopping False admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+run "afhq_cat / phase_retrieval / pnp_flow_admm[adaptive]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem phase_retrieval steps_pnp 300 rho_admm 1500 beta_rho 2.2 t_schedule_gamma 1.9 num_denoiser_calls 5 save_norms_admm False early_stopping False admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-# run "afhq_cat / phase_retrieval / pnp_flow_admm[stochastic]" \
-#   python main.py --opts method pnp_flow_admm dataset afhq_cat problem phase_retrieval steps_pnp 300 rho_admm 1500 beta_rho 2.2 t_schedule_gamma 1.9 num_denoiser_calls 5 save_norms_admm False early_stopping False admm_gd_steps 10 adaptive_noise False deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+run "afhq_cat / phase_retrieval / pnp_flow_admm[stochastic]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem phase_retrieval steps_pnp 300 rho_admm 1500 beta_rho 2.2 t_schedule_gamma 1.9 num_denoiser_calls 5 save_norms_admm False early_stopping False admm_gd_steps 10 adaptive_noise False deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-# run "afhq_cat / phase_retrieval / pnp_flow_admm[deterministic]" \
-#   python main.py --opts method pnp_flow_admm dataset afhq_cat problem phase_retrieval steps_pnp 300 rho_admm 1500 beta_rho 2.2 t_schedule_gamma 1.9 num_denoiser_calls 5 save_norms_admm False early_stopping False admm_gd_steps 10 adaptive_noise False deterministic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+run "afhq_cat / phase_retrieval / pnp_flow_admm[deterministic]" \
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem phase_retrieval steps_pnp 300 rho_admm 1500 beta_rho 2.2 t_schedule_gamma 1.9 num_denoiser_calls 5 save_norms_admm False early_stopping False admm_gd_steps 10 adaptive_noise False deterministic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-# run "afhq_cat / phase_retrieval / pnp_flow_fbs" \
-#   python main.py --opts method pnp_flow_fbs dataset afhq_cat problem phase_retrieval steps_pnp 300 lr_pnp 1.0 alpha 0.01 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+run "afhq_cat / phase_retrieval / pnp_flow_fbs" \
+  python main.py --opts method pnp_flow_fbs dataset afhq_cat problem phase_retrieval steps_pnp 300 lr_pnp 1.0 alpha 0.01 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-run "afhq_cat / phase_retrieval / d_flow [yaml-default, unverified]" \
-  python main.py --opts method d_flow dataset afhq_cat problem phase_retrieval lmbda 0.01 alpha 0.1 max_iter 10 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+# run "afhq_cat / phase_retrieval / d_flow [yaml-default, unverified]" \
+#   python main.py --opts method d_flow dataset afhq_cat problem phase_retrieval lmbda 0.01 alpha 0.1 max_iter 10 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-# run "afhq_cat / phase_retrieval / flow_dps" \
-#   python main.py --opts method flow_dps dataset afhq_cat problem phase_retrieval steps_ode 300 grad_steps 3 grad_step_size 1.0 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+run "afhq_cat / phase_retrieval / flow_dps" \
+  python main.py --opts method flow_dps dataset afhq_cat problem phase_retrieval steps_ode 300 grad_steps 3 grad_step_size 1.0 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
 
 # # ===== afhq_cat / hdr_reconstruction =====

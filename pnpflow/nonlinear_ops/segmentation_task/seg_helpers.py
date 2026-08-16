@@ -1,8 +1,3 @@
-# Vendored (verbatim) from the user's own PNP_segmentation-main project,
-# utils.py -- only CLASS_NEIGHBORS, LABELS, and build_class_weights are kept
-# (the pieces admm_x_update_segmentation needs); that file's dataset/FID/
-# plotting utilities aren't relevant here.
-
 import torch
 
 CLASS_NEIGHBORS = {
