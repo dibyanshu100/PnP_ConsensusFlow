@@ -680,16 +680,15 @@ class PNP_FLOW_ADMM(object):
                         if a.save_results and restart == 0:
                             if iteration % 50 == 0 or self.should_save_image(iteration, steps_pnp):
                                 clean_img_cpu = clean_img.to('cpu')
-                                noisy_img_placeholder = degradation.H_adj(target_mask)
                                 restored_img = z.detach().clone()
                                 utils.compute_psnr(
-                                    clean_img_cpu, noisy_img_placeholder, restored_img,
+                                    clean_img_cpu, target_mask, restored_img,
                                     a, degradation.H_adj, iter=iteration)
                                 utils.compute_ssim(
-                                    clean_img_cpu, noisy_img_placeholder, restored_img,
+                                    clean_img_cpu, target_mask, restored_img,
                                     a, degradation.H_adj, iter=iteration)
                                 utils.compute_lpips(
-                                    clean_img_cpu, noisy_img_placeholder, restored_img,
+                                    clean_img_cpu, target_mask, restored_img,
                                     a, degradation.H_adj, iter=iteration)
 
                 # Score this restart by final CE against the (hard-label)
@@ -714,15 +713,14 @@ class PNP_FLOW_ADMM(object):
 
             if a.save_results:
                 clean_img_cpu = clean_img.to('cpu')
-                noisy_img_placeholder = degradation.H_adj(target_mask)
                 restored_img = z.detach().clone()
-                utils.save_images(clean_img_cpu, noisy_img_placeholder, restored_img,
+                utils.save_images(clean_img_cpu, target_mask, restored_img,
                                   a, degradation.H_adj, iter='final')
-                utils.compute_psnr(clean_img_cpu, noisy_img_placeholder, restored_img,
+                utils.compute_psnr(clean_img_cpu, target_mask, restored_img,
                                    a, degradation.H_adj, iter='final')
-                utils.compute_ssim(clean_img_cpu, noisy_img_placeholder, restored_img,
+                utils.compute_ssim(clean_img_cpu, target_mask, restored_img,
                                    a, degradation.H_adj, iter='final')
-                utils.compute_lpips(clean_img_cpu, noisy_img_placeholder, restored_img,
+                utils.compute_lpips(clean_img_cpu, target_mask, restored_img,
                                     a, degradation.H_adj, iter='final')
 
         if a.save_results:

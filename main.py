@@ -243,7 +243,7 @@ def main():
                 raise ValueError(
                     'Segmentation currently only supports dim_image=128 (CelebAMask-HQ)')
             sigma_noise = 0.0  # unused: segmentation's data term is CE, not Gaussian
-            seg_checkpoint = getattr(args, 'segmentation_checkpoint', 'model/celebahq/segmentation/celebahq_segmentator.pt')
+            seg_checkpoint = getattr(args, 'segmentation_checkpoint', 'model/celeba_hq/segmentation/celebahq_segmentator.pt')
             degradation = Segmentation(
                 checkpoint_path=seg_checkpoint,
                 num_classes=getattr(args, 'seg_num_classes', 19),
@@ -251,7 +251,7 @@ def main():
                 base_channels=getattr(args, 'seg_base_channels', 64),
                 device=device)
 
-            prior_checkpoint = getattr(args, 'segmentation_prior_checkpoint', 'model/celebahq/segmentation/prior_model_final_checkpoint.pt')
+            prior_checkpoint = getattr(args, 'segmentation_prior_checkpoint', 'model/celeba_hq/segmentation/prior_model_final_checkpoint.pt')
             from pnpflow.nonlinear_ops.segmentation_task.prior_net import UNet as _SegPriorUNet
             model = _SegPriorUNet(
                 input_channels=3, input_height=args.dim_image, ch=32,

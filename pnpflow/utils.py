@@ -210,14 +210,17 @@ def load_model(name_model, model, state, download=False, checkpoint_path=None, d
     if name_model == "ot":
         if download:
             assert dataset is not None
+            import gdown
+            dict_ids = {"celeba": "1ZZ6S-PGRx-tOPkr4Gt3A6RN-PChabnD6",
+                        "afhq_cat": "1FpD3cYpgtM8-KJ3Qk48fcjtr1Ne_IMOF"}
+
             output_path = f"../model/{dataset}/gaussian/ot/"
-            checkpoint_path = checkpoint_path or output_path + "model_final.pt"
-            if not os.path.exists(checkpoint_path):
-                raise FileNotFoundError(
-                    f"No checkpoint found at '{checkpoint_path}'. Pretrained "
-                    f"checkpoints are not auto-downloaded in this codebase -- "
-                    f"place your own '{name_model}' checkpoint at this path, "
-                    f"or pass an explicit checkpoint_path.")
+            folder = Path(output_path)
+            folder.mkdir(parents=True, exist_ok=True)
+            drive_id = dict_ids[dataset]
+            url = f"https://drive.google.com/uc?id={drive_id}"
+            gdown.download(url, output_path + "model_final.pt", quiet=False)
+            checkpoint_path = output_path + "model_final.pt"
 
         model.load_state_dict(torch.load(checkpoint_path, map_location=device))
         model.to(device)
@@ -611,7 +614,12 @@ def compute_psnr(clean_img, noisy_img, rec_img, args, H_adj, iter='final'):
 
     # Ensure images are in the appropriate range and format for PSNR calculation
     clean_img = postprocess(clean_img.clone(), args)
-    noisy_img = postprocess(noisy_img.clone(), args)
+    if args.problem != 'segmentation':
+        # noisy_img here is target_mask (int64 class labels) for
+        # segmentation -- postprocess()'s Normalize requires float and
+        # would crash on it, and this value is discarded below in favor of
+        # H_adj_noisy_img anyway (H_adj ignores dtype, only uses shape).
+        noisy_img = postprocess(noisy_img.clone(), args)
     rec_img = postprocess(rec_img.clone(), args)
     H_adj_noisy_img = postprocess(H_adj(noisy_img), args)
 
@@ -653,8 +661,15 @@ def compute_average_psnr(args):
 
             with open(filename, 'r') as f:
                 for line in f:
-                    iteration, psnr = map(float, line.strip().split())
-                    psnr_by_iteration[int(iteration)].append(psnr)
+                    # 'final' isn't a numeric ADMM iteration -- parse it as
+                    # its own bucket instead of crashing on float('final').
+                    iter_str, psnr_str = line.strip().split()
+                    psnr = float(psnr_str)
+                    try:
+                        iteration_key = int(float(iter_str))
+                    except ValueError:
+                        iteration_key = iter_str
+                    psnr_by_iteration[iteration_key].append(psnr)
         psnr_averages = {iteration: np.mean(
             psnrs) for iteration, psnrs in psnr_by_iteration.items()}
 
@@ -663,7 +678,11 @@ def compute_average_psnr(args):
         )
 
         with open(avg_filename, 'a') as f:
-            for iteration, avg_psnr in sorted(psnr_averages.items()):
+            # Sort numeric iterations first (ascending), non-numeric ones
+            # (e.g. 'final') last -- preserves the existing assumption a
+            # few lines below that psnr_values[-1] is the final result.
+            for iteration, avg_psnr in sorted(
+                    psnr_averages.items(), key=lambda kv: (isinstance(kv[0], str), kv[0])):
                 f.write(f'{iteration} {avg_psnr:.4f}\n')
 
         with open(avg_filename, 'r') as file:
@@ -702,7 +721,9 @@ def compute_lpips(clean_img, noisy_img, rec_img, args, H_adj, iter='final'):
 
     # Ensure images are in the appropriate range and format for LPIPS calculation
     clean_img = postprocess(clean_img.clone(), args)
-    noisy_img = postprocess(noisy_img.clone(), args)
+    if args.problem != 'segmentation':
+        # See compute_psnr's identical guard.
+        noisy_img = postprocess(noisy_img.clone(), args)
     rec_img = postprocess(rec_img.clone(), args)
     H_adj_noisy_img = postprocess(H_adj(noisy_img), args)
 
@@ -753,8 +774,14 @@ def compute_average_lpips(args):
 
             with open(filename, 'r') as f:
                 for line in f:
-                    iteration, lpips = map(float, line.strip().split())
-                    lpips_by_iteration[int(iteration)].append(lpips)
+                    # See compute_average_psnr's identical fix.
+                    iter_str, lpips_str = line.strip().split()
+                    lpips = float(lpips_str)
+                    try:
+                        iteration_key = int(float(iter_str))
+                    except ValueError:
+                        iteration_key = iter_str
+                    lpips_by_iteration[iteration_key].append(lpips)
 
         # Calculate the average LPIPS score for each iteration
         lpips_averages = {iteration: np.mean(
@@ -766,7 +793,8 @@ def compute_average_lpips(args):
         )
 
         with open(avg_filename, 'a') as f:
-            for iteration, avg_lpips in sorted(lpips_averages.items()):
+            for iteration, avg_lpips in sorted(
+                    lpips_averages.items(), key=lambda kv: (isinstance(kv[0], str), kv[0])):
                 f.write(f'{iteration} {avg_lpips:.4f}\n')
 
         # Extract the last recorded LPIPS value for final comparison
@@ -798,7 +826,11 @@ def compute_ssim(clean_img, noisy_img, rec_img, args, H_adj, iter='final'):
     H_adj_noisy_img = postprocess(
         H_adj(noisy_img), args).cpu()
     clean_img = postprocess(clean_img.clone(), args).cpu()
-    noisy_img = postprocess(noisy_img.clone(), args).cpu()
+    if args.problem != 'segmentation':
+        # See compute_psnr's identical guard -- noisy_img is an int64
+        # label map here, postprocess() would crash on it, and it's
+        # discarded below in favor of H_adj_noisy_img regardless.
+        noisy_img = postprocess(noisy_img.clone(), args).cpu()
     rec_img = postprocess(rec_img.clone(), args).cpu()
 
     # Convert images to the appropriate format for SSIM calculation
@@ -844,8 +876,14 @@ def compute_average_ssim(args):
 
             with open(filename, 'r') as f:
                 for line in f:
-                    iteration, ssim = map(float, line.strip().split())
-                    ssim_by_iteration[int(iteration)].append(ssim)
+                    # See compute_average_psnr's identical fix.
+                    iter_str, ssim_str = line.strip().split()
+                    ssim = float(ssim_str)
+                    try:
+                        iteration_key = int(float(iter_str))
+                    except ValueError:
+                        iteration_key = iter_str
+                    ssim_by_iteration[iteration_key].append(ssim)
         ssim_averages = {iteration: np.mean(
             ssims) for iteration, ssims in ssim_by_iteration.items()}
 
@@ -854,7 +892,8 @@ def compute_average_ssim(args):
         )
 
         with open(avg_filename, 'a') as f:
-            for iteration, avg_ssim in sorted(ssim_averages.items()):
+            for iteration, avg_ssim in sorted(
+                    ssim_averages.items(), key=lambda kv: (isinstance(kv[0], str), kv[0])):
                 f.write(f'{iteration} {avg_ssim:.4f}\n')
 
         with open(avg_filename, 'r') as file:
