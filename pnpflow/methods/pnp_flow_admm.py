@@ -561,7 +561,7 @@ class PNP_FLOW_ADMM(object):
             CLASS_NEIGHBORS, build_class_weights)
 
         a = self.args
-        rho = float(getattr(a, 'seg_rho', 500.0))
+        rho = float(getattr(a, 'seg_rho', 1000))
         x_lr = float(getattr(a, 'seg_x_lr', 1e-4))
         x_lr_decay = float(getattr(a, 'seg_x_lr_decay', 1.0))
         x_inner_steps_min = int(getattr(a, 'seg_x_inner_steps_min', 15))
@@ -572,10 +572,10 @@ class PNP_FLOW_ADMM(object):
         mask_noise_schedule = str(getattr(a, 'seg_mask_noise_schedule', 'early_drop'))
         mask_noise_kernel_size = int(getattr(a, 'seg_mask_noise_kernel_size', 5))
         mask_noise_interior_scale = float(getattr(a, 'seg_mask_noise_interior_scale', 0.0))
-        ce_weight_start = float(getattr(a, 'seg_ce_weight_start', 10.0))
-        ce_weight_end = float(getattr(a, 'seg_ce_weight_end', 2.0))
+        ce_weight_start = float(getattr(a, 'seg_ce_weight_start', 15.0))
+        ce_weight_end = float(getattr(a, 'seg_ce_weight_end', 15.0))
         ce_weight_schedule = str(getattr(a, 'seg_ce_weight_schedule', 'linear'))
-        x_update_warmup_iters = int(getattr(a, 'seg_x_update_warmup_iters', 5))
+        x_update_warmup_iters = int(getattr(a, 'seg_x_update_warmup_iters', 0))
         x_update_cooldown_iters = int(getattr(a, 'seg_x_update_cooldown_iters', 0))
         x_update_frequency = max(int(getattr(a, 'seg_x_update_frequency', 1)), 1)
         max_step_norm_raw = float(getattr(a, 'seg_max_step_norm', 0.0))
@@ -583,8 +583,8 @@ class PNP_FLOW_ADMM(object):
         use_gradient_projection = bool(getattr(a, 'seg_use_gradient_projection', 0))
         eta = float(getattr(a, 'seg_eta', 1.0))
         warmup_det_weight = float(getattr(a, 'seg_warmup_det_weight', 0.1))
-        active_det_weight_start = float(getattr(a, 'seg_active_det_weight_start', 0.65))
-        active_det_weight_end = float(getattr(a, 'seg_active_det_weight_end', 0.9))
+        active_det_weight_start = float(getattr(a, 'seg_active_det_weight_start', 0.6))
+        active_det_weight_end = float(getattr(a, 'seg_active_det_weight_end', 0.8))
         cooldown_det_weight = float(getattr(a, 'seg_cooldown_det_weight', 0.5))
         clamp_normalized = (float(getattr(a, 'seg_clamp_min', -1.0)),
                             float(getattr(a, 'seg_clamp_max', 1.0)))
