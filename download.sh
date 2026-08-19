@@ -145,9 +145,10 @@ elif [ "$FILE" == "celebahq-dataset" ]; then
     DEST_DIR=./data/celebahq
     RAW_DIR="$DEST_DIR/raw"
     IMG_DIR="$DEST_DIR/test"
+    MASK_DIR="$DEST_DIR/mask_anno"
  
     echo "Creating dataset directory..."
-    mkdir -p "$RAW_DIR" "$IMG_DIR"
+    mkdir -p "$RAW_DIR" "$IMG_DIR" "$MASK_DIR"
  
     echo "Downloading CelebAMask-HQ from Kaggle..."
     kaggle datasets download \
@@ -176,11 +177,27 @@ elif [ "$FILE" == "celebahq-dataset" ]; then
     echo "Moving images into $IMG_DIR ..."
     mv "$SRC_IMG_DIR"/* "$IMG_DIR/"
  
+    echo ""
+    echo "Locating the ground-truth mask-annotation folder..."
+    SRC_MASK_DIR=$(find "$RAW_DIR" -type d -iname "CelebAMask-HQ-mask-anno" | head -n 1)
+ 
+    if [ -z "$SRC_MASK_DIR" ]; then
+        echo "Warning: could not find a 'CelebAMask-HQ-mask-anno' folder"
+        echo "inside the downloaded dataset (see the directory tree above)."
+        echo "Only face images were saved -- ground-truth masks won't be"
+        echo "available. Inspect $RAW_DIR manually if you need them."
+    else
+        echo "Found mask annotations at: $SRC_MASK_DIR"
+        echo "Moving mask annotations into $MASK_DIR ..."
+        mv "$SRC_MASK_DIR"/* "$MASK_DIR/"
+    fi
+ 
     echo "Cleaning up..."
     rm -rf "$RAW_DIR"
  
     echo "Done!"
     echo "Images stored in: $IMG_DIR"
+    echo "Mask annotations stored in: $MASK_DIR (if found -- see above)"
     echo ""
     echo "To use train/test splits, place train_ids.txt/test_ids.txt at"
     echo "$DEST_DIR/splits/ and pass their paths via --opts"

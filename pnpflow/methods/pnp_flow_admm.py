@@ -5,6 +5,7 @@ from time import perf_counter
 import pnpflow.image_generation.models.utils as mutils
 import pnpflow.utils as utils
 import matplotlib.pyplot as plt
+from pnpflow.nonlinear_ops.segmentation_task.seg_helpers import CLASS_NEIGHBORS
 
 
 class PNP_FLOW_ADMM(object):
@@ -384,6 +385,29 @@ class PNP_FLOW_ADMM(object):
         self.solve_ip(
             data_loaders[self.args.eval_split], degradation, sigma_noise, H_funcs)
 
+    def admm_x_update_segmentation(
+        self, degradation, x_init, target_distribution, z, u, rho, lr,
+        n_inner_steps=5, clamp_normalized=(-1.0, 1.0), ce_weight=15.0,
+    ):
+        """CE + rho-penalty gradient descent x-update for segmentation's
+        cross-entropy data term (mirrors the proximal-gradient x-update
+        used for other nonlinear operators in admm_x_update)."""
+        x_current = x_init.detach().clone()
+        target_distribution = target_distribution.detach()
+        z, u = z.detach(), u.detach()
+        admm_target = z - u
+
+        for _ in range(n_inner_steps):
+            x_req = x_current.detach().requires_grad_(True)
+            log_probs = torch.nn.functional.log_softmax(degradation.H(x_req), dim=1)
+            ce = -ce_weight * (target_distribution * log_probs).sum()
+            pen = 0.5 * rho * ((x_req - admm_target) ** 2).sum()
+            grad = torch.autograd.grad(ce + pen, x_req)[0]
+            with torch.no_grad():
+                x_current = (x_req - lr * grad).clamp(*clamp_normalized)
+
+        return x_current.detach()
+
     @staticmethod
     def _seg_build_neighbor_matrix(num_classes, class_neighbors):
         matrix = torch.zeros(num_classes, num_classes, dtype=torch.float32)
@@ -393,206 +417,49 @@ class PNP_FLOW_ADMM(object):
             if not neighbors:
                 matrix[class_id, class_id] = 1.0
             else:
-                matrix[class_id, neighbors] = (1.0 / len(neighbors))
+                matrix[class_id, neighbors] = 1.0 / len(neighbors)
         return matrix
 
     @torch.no_grad()
-    def _seg_make_local_boundary_soft_target(self, target_mask, alpha, num_classes,
-                                              kernel_size, interior_scale):
-        target_mask = target_mask.detach().long()
-        one_hot = torch.nn.functional.one_hot(target_mask, num_classes=num_classes)
-        one_hot = one_hot.permute(0, 3, 1, 2).float().contiguous()
-        if alpha <= 0.0:
-            return one_hot
-        k = kernel_size
-        local_classes = torch.nn.functional.avg_pool2d(
-            one_hot, kernel_size=k, stride=1, padding=k // 2)
-        neighbors = local_classes * (1.0 - one_hot)
-        neighbor_sum = neighbors.sum(dim=1, keepdim=True)
-        neighbor_distribution = neighbors / neighbor_sum.clamp_min(1e-12)
-        boundary = (neighbor_sum > 0).float()
-        random_distribution = torch.rand_like(one_hot)
-        random_distribution = random_distribution / \
-            random_distribution.sum(dim=1, keepdim=True).clamp_min(1e-12)
-        noise_distribution = (boundary * neighbor_distribution
-                              + (1.0 - boundary) * random_distribution)
-        alpha_interior = min(max(alpha * interior_scale, 0.0), 1.0)
-        alpha_map = boundary * alpha + (1.0 - boundary) * alpha_interior
-        soft_target = (1.0 - alpha_map) * one_hot + alpha_map * noise_distribution
-        return soft_target / soft_target.sum(dim=1, keepdim=True).clamp_min(1e-12)
-
-    @torch.no_grad()
     def _seg_make_neighbor_soft_target(self, target_mask, alpha, num_classes,
-                                        neighbor_matrix, mask_noise_type, progress=0.0):
-        target_mask = target_mask.detach().long()
+                                        neighbor_matrix):
+        """Blend the hard one-hot target with each class's neighbor
+        distribution (CLASS_NEIGHBORS), weighted by alpha
+        (0 = pure hard target, 1 = pure neighbor distribution)."""
         one_hot = torch.nn.functional.one_hot(target_mask, num_classes=num_classes)
         one_hot = one_hot.permute(0, 3, 1, 2).float().contiguous()
         if alpha <= 0.0:
             return one_hot
-        if mask_noise_type == "neighbor":
-            noise_distribution = torch.einsum("bchw,cd->bdhw", one_hot, neighbor_matrix)
-        elif mask_noise_type == "random":
-            noise_distribution = torch.rand_like(one_hot)
-            noise_distribution = noise_distribution / noise_distribution.sum(dim=1, keepdim=True).clamp_min(1e-12)
-        elif mask_noise_type == "auto":
-            random_distribution = torch.rand_like(one_hot)
-            random_distribution = random_distribution / random_distribution.sum(dim=1, keepdim=True).clamp_min(1e-12)
-            neighbor_distribution = torch.einsum("bchw,cd->bdhw", one_hot, neighbor_matrix)
-            w_neighbor = min(max(float(progress), 0.0), 1.0)
-            noise_distribution = (1.0 - w_neighbor) * random_distribution + w_neighbor * neighbor_distribution
-        else:
-            raise ValueError(f"Unknown seg_mask_noise_type: {mask_noise_type}")
-        soft_target = (1.0 - alpha) * one_hot + alpha * noise_distribution
+        neighbor_distribution = torch.einsum("bchw,cd->bdhw", one_hot, neighbor_matrix)
+        soft_target = (1.0 - alpha) * one_hot + alpha * neighbor_distribution
         return soft_target / soft_target.sum(dim=1, keepdim=True).clamp_min(1e-12)
-
-
+ 
     @staticmethod
-    def _seg_get_mask_noise_weight(progress, mask_noise_start, mask_noise_schedule):
+    def _seg_get_mask_noise_weight(progress, noise_start=0.3):
         progress = min(max(float(progress), 0.0), 1.0)
-        if mask_noise_schedule == "constant":
-            alpha = mask_noise_start
-        elif mask_noise_schedule == "linear":
-            alpha = mask_noise_start * (1.0 - progress)
-        elif mask_noise_schedule == "quadratic":
-            alpha = mask_noise_start * (1.0 - progress) ** 2
-        elif mask_noise_schedule == "cosine":
-            alpha = mask_noise_start * 0.5 * (1.0 + np.cos(np.pi * progress))
-        elif mask_noise_schedule == "early_drop":
-            alpha = mask_noise_start * (1.0 - progress) ** 3
-        elif mask_noise_schedule == "increasing":
-            alpha = mask_noise_start * progress
-        else:
-            raise ValueError(f"Unknown seg_mask_noise_schedule: {mask_noise_schedule}")
-        return float(alpha)
-
-    @staticmethod
-    def _seg_get_ce_weight(progress, ce_weight_start, ce_weight_end, ce_weight_schedule):
-        progress = min(max(float(progress), 0.0), 1.0)
-        start, end = ce_weight_start, ce_weight_end
-        if ce_weight_schedule == "constant":
-            return start
-        elif ce_weight_schedule == "linear":
-            return start + (end - start) * progress
-        elif ce_weight_schedule == "quadratic":
-            return start + (end - start) * (progress ** 2)
-        elif ce_weight_schedule == "cosine":
-            return start + (end - start) * 0.5 * (1.0 - np.cos(np.pi * progress))
-        elif ce_weight_schedule == "early_drop":
-            return end + (start - end) * (1.0 - progress) ** 3
-        else:
-            raise ValueError(f"Unknown seg_ce_weight_schedule: {ce_weight_schedule}")
-
-    @staticmethod
-    def _seg_get_active_det_weight(iteration, steps_pnp, warmup_iters, cooldown_iters, start, end):
-        active_start = warmup_iters
-        active_end = steps_pnp - cooldown_iters
-        span = max(active_end - active_start - 1, 1)
-        active_progress = min(max((iteration - active_start) / span, 0.0), 1.0)
-        return start + (end - start) * active_progress
-
-    @staticmethod
-    def _seg_update_noise(z_tilde, z, t_view, old_shape_like, det_weight):
-        gauss_noise_1 = (z_tilde - z * t_view) / ((1.0 - t_view) + 1e-12)
-        gauss_noise_2 = torch.randn_like(old_shape_like)
-        d = float(det_weight)
-        w_det, w_rand = d, 1.0 - d
-        norm = (w_rand ** 2 + w_det ** 2) ** 0.5 + 1e-12
-        return (w_rand * gauss_noise_2 + w_det * gauss_noise_1) / norm
-
-    def admm_x_update_segmentation(
-        self, degradation, x_init, target_distribution, z, u, rho, lr,
-        n_inner_steps=5, clamp_normalized=(-1.0, 1.0), max_step_norm=None,
-        use_gradient_projection=False, eta=0.3, eps=1e-8, ce_weight=1.0,
-        class_weights=None,
-    ):
-        """Ported from SegmentationForwardModel.admm_x_update_gd: CE + rho
-        penalty gradient descent, with optional conflict-aware CE-gradient
-        projection and a per-sample step-norm cap.
-        """
-        x_current = x_init.detach().clone()
-        target_distribution = target_distribution.detach()
-        z, u = z.detach(), u.detach()
-        admm_target = z - u
-
-        def project(v0, v1):
-            v1_unit = v1 / v1.flatten(1).norm(dim=1).view(-1, 1, 1, 1).clamp_min(eps)
-            parallel = (v0 * v1_unit).sum(dim=(1, 2, 3), keepdim=True) * v1_unit
-            return parallel, v0 - parallel
-
-        for _ in range(n_inner_steps):
-            x_req = x_current.detach().requires_grad_(True)
-            log_probs = torch.nn.functional.log_softmax(degradation.H(x_req), dim=1)
-
-            if class_weights is not None:
-                w = class_weights.to(device=x_req.device, dtype=x_req.dtype).view(1, -1, 1, 1)
-                ce = -ce_weight * (target_distribution * w * log_probs).sum()
-            else:
-                ce = -ce_weight * (target_distribution * log_probs).sum()
-
-            pen = 0.5 * rho * ((x_req - admm_target) ** 2).sum()
-
-            grad_ce = torch.autograd.grad(ce, x_req, retain_graph=True)[0]
-            grad_pen = torch.autograd.grad(pen, x_req)[0]
-
-            conflict = (grad_ce * grad_pen).sum(dim=(1, 2, 3), keepdim=True) < 0
-            if use_gradient_projection:
-                ce_parallel, ce_orthogonal = project(grad_ce, grad_pen)
-                grad_ce = torch.where(conflict, eta * ce_orthogonal + ce_parallel, grad_ce)
-            step = lr * (grad_ce + grad_pen)
-
-            if max_step_norm is not None:
-                step_norm = step.flatten(1).norm(dim=1).view(-1, 1, 1, 1).clamp_min(eps)
-                scale = (max_step_norm / step_norm).clamp(max=1.0)
-                step = step * scale
-
-            with torch.no_grad():
-                x_current = (x_req - step).clamp(*clamp_normalized)
-
-        return x_current.detach()
+        return float(noise_start * (1.0 - progress) ** 3)
 
     def solve_ip_segmentation(self, test_loader, degradation):
-        """On the measurement:`target_mask` is built as `degradation.H(clean_img).argmax(1)` (the
-        frozen segmentator's own prediction on the clean image), matching
-        how every other nonlinear operator in this codebase builds its
-        measurement.
+        """Segmentation branch of the ADMM solver. Uses the exact same
+        rho / beta_rho (power) / t_schedule_gamma schedule as every other
+        task -- see rho_schedule(). The only segmentation-specific
+        hyperparameters left are the CE data-term weight and the x-update's
+        inner gradient-descent steps/learning rate.
         """
         import torch.nn.functional as Fs
-        from pnpflow.nonlinear_ops.segmentation_task.seg_helpers import (
-            CLASS_NEIGHBORS, build_class_weights)
 
         a = self.args
-        rho = float(getattr(a, 'seg_rho', 1000))
-        x_lr = float(getattr(a, 'seg_x_lr', 1e-4))
-        x_lr_decay = float(getattr(a, 'seg_x_lr_decay', 1.0))
-        x_inner_steps_min = int(getattr(a, 'seg_x_inner_steps_min', 15))
-        x_inner_steps_max = int(getattr(a, 'seg_x_inner_steps_max', 5))
-        steps_pnp = int(getattr(a, 'seg_steps_pnp', 300))
-        mask_noise_start = float(getattr(a, 'seg_mask_noise_start', 0.3))
-        mask_noise_type = str(getattr(a, 'seg_mask_noise_type', 'neighbor'))
-        mask_noise_schedule = str(getattr(a, 'seg_mask_noise_schedule', 'early_drop'))
-        mask_noise_kernel_size = int(getattr(a, 'seg_mask_noise_kernel_size', 5))
-        mask_noise_interior_scale = float(getattr(a, 'seg_mask_noise_interior_scale', 0.0))
-        ce_weight_start = float(getattr(a, 'seg_ce_weight_start', 15.0))
-        ce_weight_end = float(getattr(a, 'seg_ce_weight_end', 15.0))
-        ce_weight_schedule = str(getattr(a, 'seg_ce_weight_schedule', 'linear'))
-        x_update_warmup_iters = int(getattr(a, 'seg_x_update_warmup_iters', 0))
-        x_update_cooldown_iters = int(getattr(a, 'seg_x_update_cooldown_iters', 0))
-        x_update_frequency = max(int(getattr(a, 'seg_x_update_frequency', 1)), 1)
-        max_step_norm_raw = float(getattr(a, 'seg_max_step_norm', 0.0))
-        max_step_norm = None if max_step_norm_raw <= 0 else max_step_norm_raw
-        use_gradient_projection = bool(getattr(a, 'seg_use_gradient_projection', 0))
-        eta = float(getattr(a, 'seg_eta', 1.0))
-        warmup_det_weight = float(getattr(a, 'seg_warmup_det_weight', 0.1))
-        active_det_weight_start = float(getattr(a, 'seg_active_det_weight_start', 0.6))
-        active_det_weight_end = float(getattr(a, 'seg_active_det_weight_end', 0.8))
-        cooldown_det_weight = float(getattr(a, 'seg_cooldown_det_weight', 0.5))
-        clamp_normalized = (float(getattr(a, 'seg_clamp_min', -1.0)),
-                            float(getattr(a, 'seg_clamp_max', 1.0)))
-        num_restarts = int(getattr(a, 'num_restarts', 1))
+        rho = float(a.rho_admm)
+        steps = int(a.steps_pnp)
+        delta = 1.0 / steps
+        gamma = float(a.t_schedule_gamma)
 
-        class_weights = build_class_weights(degradation.num_classes).to(self.device)
-        neighbor_matrix = self._seg_build_neighbor_matrix(
-            degradation.num_classes, CLASS_NEIGHBORS).to(self.device)
+        ce_weight = float(getattr(a, 'seg_ce_weight', 10.0))
+        x_lr = float(getattr(a, 'seg_x_lr', 1e-4))
+        x_inner_steps = int(getattr(a, 'seg_x_inner_steps', 10))
+        clamp_normalized = (-1.0, 1.0)
+        num_restarts = int(getattr(a, 'num_restarts', 1))
+        neighbor_matrix = self._seg_build_neighbor_matrix(degradation.num_classes, CLASS_NEIGHBORS).to(self.device)
 
         loader = iter(test_loader)
         for _ in range(a.start_batch):
@@ -602,6 +469,12 @@ class PNP_FLOW_ADMM(object):
             a.batch = batch
             print(clean_img.shape)
             clean_img = clean_img.to(self.device)
+
+            if torch.is_tensor(labels) and labels.dim() == 3:
+                target_mask = labels.to(self.device)
+            else:
+                with torch.no_grad():
+                    target_mask = degradation.H(clean_img).argmax(dim=1)
 
             with torch.no_grad():
                 target_mask = degradation.H(clean_img).argmax(dim=1)
@@ -617,87 +490,56 @@ class PNP_FLOW_ADMM(object):
                 x = torch.randn_like(clean_img)
                 z = x.clone()
                 u = torch.zeros_like(x)
-                gauss_noise = torch.randn_like(x)
-                delta = 1.0 / max(steps_pnp, 1)
+                gauss_noise = x.clone()
 
-                for iteration in range(steps_pnp):
-                    progress = iteration / max(steps_pnp - 1, 1)
-                    mask_noise_weight = self._seg_get_mask_noise_weight(
-                        progress, mask_noise_start, mask_noise_schedule)
-                    if mask_noise_type == "boundary":
-                        target_distribution = self._seg_make_local_boundary_soft_target(
-                            target_mask=target_mask, alpha=mask_noise_weight,
-                            num_classes=degradation.num_classes,
-                            kernel_size=mask_noise_kernel_size,
-                            interior_scale=mask_noise_interior_scale)
-                    else:
-                        target_distribution = self._seg_make_neighbor_soft_target(
-                            target_mask=target_mask, alpha=mask_noise_weight,
-                            num_classes=degradation.num_classes,
-                            neighbor_matrix=neighbor_matrix,
-                            mask_noise_type=mask_noise_type, progress=progress)
-
-                    inner_steps = int(round(
-                        x_inner_steps_min + progress * (x_inner_steps_max - x_inner_steps_min)))
-                    in_warmup = iteration < x_update_warmup_iters
-                    in_cooldown = iteration >= steps_pnp - x_update_cooldown_iters
-                    if in_warmup or in_cooldown:
-                        inner_steps = 0
-                    elif (iteration - x_update_warmup_iters) % x_update_frequency != 0:
-                        inner_steps = 0
-                    x_was_updated = inner_steps > 0
-
-                    if in_warmup:
-                        current_det_weight = warmup_det_weight
-                    elif in_cooldown:
-                        current_det_weight = cooldown_det_weight
-                    else:
-                        current_det_weight = self._seg_get_active_det_weight(
-                            iteration, steps_pnp, x_update_warmup_iters,
-                            x_update_cooldown_iters, active_det_weight_start,
-                            active_det_weight_end)
-
-                    t = torch.ones(x.shape[0], device=self.device) * (delta * iteration)
+                for iteration in range(steps):
+                    t_linear = delta * iteration
+                    t_val = t_linear ** gamma
+                    t = torch.ones(x.shape[0], device=self.device) * t_val
                     t_view = t.view(-1, 1, 1, 1)
+
+                    rho_t = self.rho_schedule(rho, t_val)
+                    progress = iteration / max(steps - 1, 1)
+                    mask_noise_weight = self._seg_get_mask_noise_weight(progress,noise_start=0.3)
+                    target_distribution = self._seg_make_neighbor_soft_target(
+                        target_mask=target_mask, alpha=mask_noise_weight,
+                        num_classes=degradation.num_classes,
+                        neighbor_matrix=neighbor_matrix)
+
                     z_prev = z.clone()
                     u_prev = u.clone()
-
-                    current_lr = x_lr * (x_lr_decay ** iteration)
-                    current_ce_weight = self._seg_get_ce_weight(
-                        progress, ce_weight_start, ce_weight_end, ce_weight_schedule)
 
                     x = self.admm_x_update_segmentation(
                         degradation=degradation, x_init=x,
                         target_distribution=target_distribution, z=z, u=u,
-                        rho=rho, lr=current_lr, n_inner_steps=inner_steps,
-                        clamp_normalized=clamp_normalized,
-                        max_step_norm=max_step_norm,
-                        use_gradient_projection=use_gradient_projection,
-                        eta=eta, ce_weight=current_ce_weight,
-                        class_weights=class_weights)
+                        rho=rho_t, lr=x_lr, n_inner_steps=x_inner_steps,
+                        clamp_normalized=clamp_normalized, ce_weight=ce_weight)
 
                     with torch.no_grad():
                         z_input = x + u
                         z_tilde = self.projection_step(z_input, t_view, gauss_noise)
                         z = self.denoiser(z_tilde, t).clamp(*clamp_normalized)
-                        gauss_noise = self._seg_update_noise(
-                            z_tilde=z_tilde, z=z, t_view=t_view,
-                            old_shape_like=x, det_weight=current_det_weight)
+                        gauss_noise_det = (z_tilde - z * t_view) / ((1.0 - t_view) + 1e-12)
+                        gauss_noise_rand = torch.randn_like(x)
+                        det_weight = t_view
+                        rand_weight = 1.0 - det_weight
 
-                        if x_was_updated:
-                            u = u + (x - z)
+                        # Variance-normalized
+                        gauss_noise = (rand_weight * gauss_noise_rand + det_weight * gauss_noise_det) / torch.sqrt(
+                            torch.tensor(rand_weight ** 2 + det_weight ** 2,device=x.device,dtype=x.dtype))
+
+                        u = u + (x - z)
 
                         primal_res = torch.norm(x - z).item()
-                        dual_res = (rho * torch.norm(z - z_prev)).item()
+                        dual_res = (rho_t * torch.norm(z - z_prev)).item()
                         u_inc = torch.norm(u - u_prev).item()
 
-                        if iteration % 50 == 0 or iteration == steps_pnp - 1:
-                            print(f"Iter {iteration}: ||x-z||={primal_res:.4f}, "
-                                  f"rho||z-z_prev||={dual_res:.4f}, "
-                                  f"||u-u_prev||={u_inc:.4f}")
+                        if iteration % 50 == 0 or iteration == steps - 1:
+                            print(f"Iter {iteration}: rho_t={rho_t:.4f}, ||x-z||={primal_res:.4f}, "
+                                  f"rho_t||z-z_prev||={dual_res:.4f}, ||u-u_prev||={u_inc:.4f}")
 
                         if a.save_results and restart == 0:
-                            if iteration % 50 == 0 or self.should_save_image(iteration, steps_pnp):
+                            if iteration % 50 == 0 or self.should_save_image(iteration, steps):
                                 clean_img_cpu = clean_img.to('cpu')
                                 restored_img = z.detach().clone()
                                 utils.compute_psnr(
@@ -710,9 +552,6 @@ class PNP_FLOW_ADMM(object):
                                     clean_img_cpu, target_mask, restored_img,
                                     a, degradation.H_adj, iter=iteration)
 
-                # Score this restart by final CE against the (hard-label)
-                # target -- the classification analogue of the ||H(x)-y||
-                # residual restarts are scored by for every other problem.
                 with torch.no_grad():
                     ce_final = Fs.cross_entropy(
                         degradation.H(z), target_mask, reduction='none'
