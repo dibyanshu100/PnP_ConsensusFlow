@@ -435,7 +435,7 @@ class PNP_FLOW_ADMM(object):
         return soft_target / soft_target.sum(dim=1, keepdim=True).clamp_min(1e-12)
  
     @staticmethod
-    def _seg_get_mask_noise_weight(progress, noise_start=0.3):
+    def _seg_get_mask_noise_weight(progress, noise_start=0.2):
         progress = min(max(float(progress), 0.0), 1.0)
         return float(noise_start * (1.0 - progress) ** 3)
 
@@ -500,7 +500,7 @@ class PNP_FLOW_ADMM(object):
 
                     rho_t = self.rho_schedule(rho, t_val)
                     progress = iteration / max(steps - 1, 1)
-                    mask_noise_weight = self._seg_get_mask_noise_weight(progress,noise_start=0.3)
+                    mask_noise_weight = self._seg_get_mask_noise_weight(progress,noise_start=0.2)
                     target_distribution = self._seg_make_neighbor_soft_target(
                         target_mask=target_mask, alpha=mask_noise_weight,
                         num_classes=degradation.num_classes,
@@ -521,7 +521,13 @@ class PNP_FLOW_ADMM(object):
                         z = self.denoiser(z_tilde, t).clamp(*clamp_normalized)
                         gauss_noise_det = (z_tilde - z * t_view) / ((1.0 - t_view) + 1e-12)
                         gauss_noise_rand = torch.randn_like(x)
-                        det_weight = t_view
+                        # det_weight = t_view
+                        # rand_weight = 1.0 - det_weight
+
+                        det_weight_start = 0.6
+                        det_weight_end = 0.8
+
+                        det_weight = det_weight_start + (det_weight_end - det_weight_start) * t_view
                         rand_weight = 1.0 - det_weight
 
                         # Variance-normalized
