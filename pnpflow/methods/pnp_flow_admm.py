@@ -435,7 +435,7 @@ class PNP_FLOW_ADMM(object):
         return soft_target / soft_target.sum(dim=1, keepdim=True).clamp_min(1e-12)
  
     @staticmethod
-    def _seg_get_mask_noise_weight(progress, noise_start=0.2):
+    def _seg_get_mask_noise_weight(progress, noise_start=0.3):
         progress = min(max(float(progress), 0.0), 1.0)
         return float(noise_start * (1.0 - progress) ** 3)
 
@@ -470,14 +470,16 @@ class PNP_FLOW_ADMM(object):
             print(clean_img.shape)
             clean_img = clean_img.to(self.device)
 
-            if torch.is_tensor(labels) and labels.dim() == 3:
-                target_mask = labels.to(self.device)
-            else:
-                with torch.no_grad():
-                    target_mask = degradation.H(clean_img).argmax(dim=1)
-
             with torch.no_grad():
                 target_mask = degradation.H(clean_img).argmax(dim=1)
+
+                label_noise_p = float(getattr(a, 'seg_label_noise_p', 0.001))
+                if label_noise_p > 0.0:
+                    torch.manual_seed(batch)
+                    flip_mask = torch.rand_like(target_mask.float()) < label_noise_p
+                    random_labels = torch.randint(
+                        0, degradation.num_classes, target_mask.shape, device=target_mask.device)
+                    target_mask = torch.where(flip_mask, random_labels, target_mask)
 
             best_ce = None
             best_z = None
