@@ -213,6 +213,11 @@ class D_FLOW(object):
                                    restored_img, self.args, H_adj, iter=iteration)
                 utils.compute_lpips(clean_img, noisy_img,
                                     restored_img, self.args, H_adj, iter=iteration)
+
+                if getattr(degradation, 'is_segmentation', False):
+                    utils.save_recon_for_fid(
+                        clean_img, restored_img, self.args,
+                        batch_offset=batch * self.args.batch_size_ip)
                 del restored_img
 
             del noisy_img, clean_img, x, z

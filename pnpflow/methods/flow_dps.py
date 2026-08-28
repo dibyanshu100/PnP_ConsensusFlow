@@ -197,6 +197,11 @@ class FLOW_DPS(object):
                 utils.compute_lpips(clean_img, noisy_img,
                                     restored_img, self.args, H_adj, iter=iteration)
 
+            if self.args.save_results and getattr(degradation, 'is_segmentation', False):
+                utils.save_recon_for_fid(
+                    clean_img, restored_img, self.args,
+                    batch_offset=batch * self.args.batch_size_ip)
+
         if self.args.save_results:
             utils.compute_average_psnr(self.args)
             utils.compute_average_ssim(self.args)
