@@ -562,6 +562,28 @@ def save_images(clean_img, noisy_img, rec_img, args, H_adj, iter='final'):
                     plt.close(fig)
 
 
+def save_recon_for_fid(clean_img, rec_img, args, batch_offset=0):
+    clean_img = postprocess(clean_img.clone(), args)
+    rec_img = postprocess(rec_img.clone(), args)
+
+    clean_img = clean_img.permute(0, 2, 3, 1).cpu().data.numpy()
+    rec_img = rec_img.permute(0, 2, 3, 1).cpu().data.numpy()
+
+    recon_dir = os.path.join(args.save_path_ip, 'fid_kid_images', 'recon')
+    real_dir = os.path.join(args.save_path_ip, 'fid_kid_images', 'real')
+    os.makedirs(recon_dir, exist_ok=True)
+    os.makedirs(real_dir, exist_ok=True)
+
+    for i in range(rec_img.shape[0]):
+        global_idx = batch_offset + i
+        rec_uint8 = np.clip(rec_img[i] * 255.0, 0, 255).astype(np.uint8)
+        clean_uint8 = np.clip(clean_img[i] * 255.0, 0, 255).astype(np.uint8)
+        cv2.imwrite(os.path.join(recon_dir, f'{global_idx:06d}.png'),
+                    cv2.cvtColor(rec_uint8, cv2.COLOR_RGB2BGR))
+        cv2.imwrite(os.path.join(real_dir, f'{global_idx:06d}.png'),
+                    cv2.cvtColor(clean_uint8, cv2.COLOR_RGB2BGR))
+
+
 def preprocess(img, args):
     if args.model == "rectified":
         import pnpflow.image_generation.datasets as datasets

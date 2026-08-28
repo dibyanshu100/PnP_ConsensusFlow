@@ -473,7 +473,7 @@ class PNP_FLOW_ADMM(object):
             with torch.no_grad():
                 target_mask = degradation.H(clean_img).argmax(dim=1)
 
-                label_noise_p = float(getattr(a, 'seg_label_noise_p', 0.001))
+                label_noise_p = float(getattr(a, 'seg_label_noise_p', 0.0))
                 if label_noise_p > 0.0:
                     torch.manual_seed(batch)
                     flip_mask = torch.rand_like(target_mask.float()) < label_noise_p
@@ -588,6 +588,13 @@ class PNP_FLOW_ADMM(object):
                                    a, degradation.H_adj, iter='final')
                 utils.compute_lpips(clean_img_cpu, target_mask, restored_img,
                                     a, degradation.H_adj, iter='final')
+
+                if a.eval_split == 'test':
+                    # Full-test-set dump for FID/KID -- distinct from
+                    # save_images()'s batch<4 qualitative-figure subset.
+                    utils.save_recon_for_fid(
+                        clean_img_cpu, restored_img, a,
+                        batch_offset=batch * a.batch_size_ip)
 
         if a.save_results:
             utils.compute_average_psnr(a)

@@ -156,6 +156,117 @@ def calculate_activation_statistics(
     return mu, sigma
 
 
+def _polynomial_kernel(X, Y, degree=3, gamma=None, coef0=1.0):
+    """(gamma * X @ Y^T + coef0) ** degree -- the kernel used by the
+    standard KID estimator (Binkowski et al., 2018)."""
+    if gamma is None:
+        gamma = 1.0 / X.shape[1]
+    return (gamma * X.dot(Y.T) + coef0) ** degree
+
+
+def _mmd2_unbiased(K_XX, K_YY, K_XY):
+    """Unbiased estimator of the squared Maximum Mean Discrepancy from
+    precomputed kernel (Gram) matrices, excluding the diagonal terms of
+    K_XX/K_YY as is standard for the unbiased estimator."""
+    m = K_XX.shape[0]
+    n = K_YY.shape[0]
+
+    sum_XX = (K_XX.sum() - np.trace(K_XX)) / (m * (m - 1))
+    sum_YY = (K_YY.sum() - np.trace(K_YY)) / (n * (n - 1))
+    sum_XY = K_XY.sum() / (m * n)
+
+    return sum_XX + sum_YY - 2 * sum_XY
+
+
+def calculate_kid(act1, act2, subset_size=1000, num_subsets=100, degree=3,
+                   gamma=None, coef0=1.0, seed=0):
+    """Kernel Inception Distance (Binkowski et al., 2018), computed on
+    precomputed Inception activations. Unlike FID, KID makes no Gaussian
+    assumption on the activations and is estimated by repeatedly
+    subsampling both activation sets and averaging the unbiased
+    polynomial-kernel MMD^2 over the subsets.
+
+    Params:
+    -- act1/act2   : (N, dims) arrays of Inception activations for the two
+                     distributions being compared (order doesn't matter).
+    -- subset_size : Size of each random subset. Capped to the smaller of
+                     len(act1), len(act2) if either has fewer samples.
+    -- num_subsets : Number of subsets to average over.
+    -- degree, gamma, coef0 : Polynomial kernel hyperparameters.
+
+    Returns:
+    -- kid_mean, kid_std : Mean and standard deviation of the per-subset
+       unbiased MMD^2 estimates.
+    """
+    rng = np.random.RandomState(seed)
+    n = min(len(act1), len(act2), subset_size)
+    if n < 2:
+        raise ValueError(
+            'calculate_kid needs at least 2 samples per subset; got '
+            f'{len(act1)} and {len(act2)} activations available.')
+
+    mmd2_estimates = np.empty(num_subsets)
+    for i in range(num_subsets):
+        idx1 = rng.choice(len(act1), n, replace=False)
+        idx2 = rng.choice(len(act2), n, replace=False)
+        x = act1[idx1]
+        y = act2[idx2]
+
+        K_XX = _polynomial_kernel(x, x, degree, gamma, coef0)
+        K_YY = _polynomial_kernel(y, y, degree, gamma, coef0)
+        K_XY = _polynomial_kernel(x, y, degree, gamma, coef0)
+
+        mmd2_estimates[i] = _mmd2_unbiased(K_XX, K_YY, K_XY)
+
+    return float(mmd2_estimates.mean()), float(mmd2_estimates.std())
+
+
+def evaluate_fid_kid(images1, images2, batch_size=50, subset_size=1000,
+                      num_subsets=100):
+    """Calculation of both FID and KID from two sets of images, reusing a
+    single pass of Inception activations for both metrics.
+
+    Params:
+    -- images1/2   : Images of shape (N, H, W, C), values in [0, 1].
+    -- batch_size  : Batch size for the Inception forward passes.
+    -- subset_size, num_subsets : See calculate_kid.
+
+    Returns:
+    -- fid_value           : The FID score.
+    -- (kid_mean, kid_std) : The KID score (mean and std over subsets).
+    """
+    device = torch.device('cuda' if (torch.cuda.is_available()) else 'cpu')
+
+    block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
+    model = InceptionV3([block_idx]).to(device)
+
+    if images1.shape[-1] == 1:
+        images1 = np.concatenate([images1, images1, images1], axis=-1)
+    if images2.shape[-1] == 1:
+        images2 = np.concatenate([images2, images2, images2], axis=-1)
+
+    if np.max(images1) > 1 or np.min(images1) < 0 or np.max(
+            images2) > 1 or np.min(images2) < 0:
+        import warnings
+        warnings.warn(
+            'FID/KID score: the values of images should be in range [0,1].')
+
+    images1 = np.transpose(images1, axes=(0, 3, 1, 2))
+    images2 = np.transpose(images2, axes=(0, 3, 1, 2))
+
+    act1 = get_activations(images1, model, batch_size, 2048, device)
+    act2 = get_activations(images2, model, batch_size, 2048, device)
+
+    mu1, sigma1 = np.mean(act1, axis=0), np.cov(act1, rowvar=False)
+    mu2, sigma2 = np.mean(act2, axis=0), np.cov(act2, rowvar=False)
+    fid_value = calculate_frechet_distance(mu1, sigma1, mu2, sigma2)
+
+    kid_mean, kid_std = calculate_kid(
+        act1, act2, subset_size=subset_size, num_subsets=num_subsets)
+
+    return fid_value, (kid_mean, kid_std)
+
+
 def evaluate_fid_score(images1, images2, batch_size=50):
     """Calculation of FID.
     Params:
