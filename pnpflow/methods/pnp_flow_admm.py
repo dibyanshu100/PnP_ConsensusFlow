@@ -546,20 +546,6 @@ class PNP_FLOW_ADMM(object):
                             print(f"Iter {iteration}: rho_t={rho_t:.4f}, ||x-z||={primal_res:.4f}, "
                                   f"rho_t||z-z_prev||={dual_res:.4f}, ||u-u_prev||={u_inc:.4f}")
 
-                        if a.save_results and restart == 0:
-                            if iteration % 50 == 0 or self.should_save_image(iteration, steps):
-                                clean_img_cpu = clean_img.to('cpu')
-                                restored_img = z.detach().clone()
-                                utils.compute_psnr(
-                                    clean_img_cpu, target_mask, restored_img,
-                                    a, degradation.H_adj, iter=iteration)
-                                utils.compute_ssim(
-                                    clean_img_cpu, target_mask, restored_img,
-                                    a, degradation.H_adj, iter=iteration)
-                                utils.compute_lpips(
-                                    clean_img_cpu, target_mask, restored_img,
-                                    a, degradation.H_adj, iter=iteration)
-
                 with torch.no_grad():
                     ce_final = Fs.cross_entropy(
                         degradation.H(z), target_mask, reduction='none'
@@ -580,23 +566,6 @@ class PNP_FLOW_ADMM(object):
             if a.save_results:
                 clean_img_cpu = clean_img.to('cpu')
                 restored_img = z.detach().clone()
-                utils.save_images(clean_img_cpu, target_mask, restored_img,
-                                  a, degradation.H_adj, iter='final')
-                utils.compute_psnr(clean_img_cpu, target_mask, restored_img,
-                                   a, degradation.H_adj, iter='final')
-                utils.compute_ssim(clean_img_cpu, target_mask, restored_img,
-                                   a, degradation.H_adj, iter='final')
-                utils.compute_lpips(clean_img_cpu, target_mask, restored_img,
-                                    a, degradation.H_adj, iter='final')
-
-                if a.eval_split == 'test':
-                    # Full-test-set dump for FID/KID -- distinct from
-                    # save_images()'s batch<4 qualitative-figure subset.
-                    utils.save_recon_for_fid(
-                        clean_img_cpu, restored_img, a,
-                        batch_offset=batch * a.batch_size_ip)
-
-        if a.save_results:
-            utils.compute_average_psnr(a)
-            utils.compute_average_ssim(a)
-            utils.compute_average_lpips(a)
+                utils.save_recon_for_fid(
+                    clean_img_cpu, restored_img, a,
+                    batch_offset=batch * a.batch_size_ip)
