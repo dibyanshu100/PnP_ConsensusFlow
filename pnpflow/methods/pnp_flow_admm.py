@@ -566,6 +566,35 @@ class PNP_FLOW_ADMM(object):
             if a.save_results:
                 clean_img_cpu = clean_img.to('cpu')
                 restored_img = z.detach().clone()
+                utils.save_images(clean_img_cpu, target_mask, restored_img,
+                                  a, degradation.H_adj, iter='final')
+                utils.compute_psnr(clean_img_cpu, target_mask, restored_img,
+                                   a, degradation.H_adj, iter='final')
+                utils.compute_ssim(clean_img_cpu, target_mask, restored_img,
+                                   a, degradation.H_adj, iter='final')
+                utils.compute_lpips(clean_img_cpu, target_mask, restored_img,
+                                    a, degradation.H_adj, iter='final')
+ 
                 utils.save_recon_for_fid(
                     clean_img_cpu, restored_img, a,
                     batch_offset=batch * a.batch_size_ip)
+ 
+                with torch.no_grad():
+                    pred_mask = degradation.H(z).argmax(dim=1)
+ 
+                utils.save_segmentation_masks(
+                    target_mask, pred_mask, a,
+                    batch_offset=batch * a.batch_size_ip)
+                utils.compute_segmentation_scores(
+                    target_mask, pred_mask, a, iter='final')
+ 
+                if batch < 4:
+                    utils.save_boundary_comparison(
+                        clean_img_cpu, restored_img, target_mask, pred_mask,
+                        a, batch_offset=batch * a.batch_size_ip)
+ 
+        if a.save_results:
+            utils.compute_average_psnr(a)
+            utils.compute_average_ssim(a)
+            utils.compute_average_lpips(a)
+            utils.compute_average_segmentation_scores(a)

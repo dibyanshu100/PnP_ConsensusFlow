@@ -584,6 +584,208 @@ def save_recon_for_fid(clean_img, rec_img, args, batch_offset=0):
                     cv2.cvtColor(clean_uint8, cv2.COLOR_RGB2BGR))
 
 
+def _seg_boundary_mask(label_map):
+    """Binary boundary map for a single [H,W] integer label map: True where
+    a pixel's label differs from its right or bottom 4-neighbor (each
+    differing pair marks both pixels, so boundaries are 2px wide, symmetric
+    across the edge)."""
+    lm = label_map.astype(np.int32)
+    boundary = np.zeros_like(lm, dtype=bool)
+    diff_h = lm[:, 1:] != lm[:, :-1]
+    diff_v = lm[1:, :] != lm[:-1, :]
+    boundary[:, 1:] |= diff_h
+    boundary[:, :-1] |= diff_h
+    boundary[1:, :] |= diff_v
+    boundary[:-1, :] |= diff_v
+    return boundary
+
+
+def _boundary_f1(target, pred, tolerance=2):
+    """BFScore (Csurka et al.) between two [H,W] integer label maps: the F1
+    of boundary pixels, where a boundary pixel counts as a match if it
+    lies within `tolerance` pixels (L2, via a distance transform) of a
+    boundary pixel in the other map. Robust to the small pixel-level
+    misalignments that penalize a naive exact-overlap boundary metric."""
+    b_t = _seg_boundary_mask(target)
+    b_p = _seg_boundary_mask(pred)
+    if not b_t.any() and not b_p.any():
+        return 1.0
+    if not b_t.any() or not b_p.any():
+        return 0.0
+
+    dt_t = cv2.distanceTransform((~b_t).astype(np.uint8), cv2.DIST_L2, 3)
+    dt_p = cv2.distanceTransform((~b_p).astype(np.uint8), cv2.DIST_L2, 3)
+
+    precision = float((dt_t[b_p] <= tolerance).mean())
+    recall = float((dt_p[b_t] <= tolerance).mean())
+    if precision + recall == 0:
+        return 0.0
+    return 2 * precision * recall / (precision + recall)
+
+
+def save_segmentation_masks(target_mask, pred_mask, args, batch_offset=0):
+    """Save a colorized (tab20-palette) version of the target/predicted
+    label maps for every image in the batch, index-aligned with
+    save_recon_for_fid's recon/real folders -- same palette save_images()
+    uses for its mask visualization.
+
+    -- target_mask : [B,H,W] int label map the solver was guided by.
+    -- pred_mask   : [B,H,W] int label map from re-segmenting the final
+       reconstruction (i.e. degradation.H(z).argmax(dim=1)).
+    """
+    t = target_mask.detach().cpu().numpy().astype(np.uint8)
+    p = pred_mask.detach().cpu().numpy().astype(np.uint8)
+
+    real_color_dir = os.path.join(args.save_path_ip, 'fid_kid_images', 'masks_real_color')
+    pred_color_dir = os.path.join(args.save_path_ip, 'fid_kid_images', 'masks_pred_color')
+    os.makedirs(real_color_dir, exist_ok=True)
+    os.makedirs(pred_color_dir, exist_ok=True)
+
+    num_classes = int(getattr(args, 'seg_num_classes', 19))
+    cmap = plt.get_cmap('tab20', num_classes)
+    palette = np.array([cmap(i)[:3] for i in range(num_classes)]) * 255.0
+    palette = palette.astype(np.uint8)  # [num_classes, 3], RGB
+
+    for i in range(t.shape[0]):
+        global_idx = batch_offset + i
+        t_color = palette[t[i]]  # [H,W,3] RGB
+        p_color = palette[p[i]]
+        cv2.imwrite(os.path.join(real_color_dir, f'{global_idx:06d}.png'),
+                    cv2.cvtColor(t_color, cv2.COLOR_RGB2BGR))
+        cv2.imwrite(os.path.join(pred_color_dir, f'{global_idx:06d}.png'),
+                    cv2.cvtColor(p_color, cv2.COLOR_RGB2BGR))
+
+
+def save_boundary_comparison(real_img, recon_img, target_mask, pred_mask,
+                              args, batch_offset=0, dilate=1):
+    """Save a [real_img + original-mask boundary] | [recon_img +
+    original-mask boundary] side-by-side PNG per image, boundary drawn in
+    red -- the *same* original/target mask boundary overlaid on both
+    photos, so misalignment between the reconstruction's content and the
+    mask it was guided by is directly visible (rather than comparing two
+    different masks, each drawn on its own photo).
+
+    Only meant as a qualitative spot-check (like save_images()'s per-image
+    PNGs), not a full-test-set dump -- callers should gate this to a
+    handful of batches.
+    """
+    real_np = postprocess(real_img.clone(), args).detach().permute(0, 2, 3, 1).cpu().numpy()
+    recon_np = postprocess(recon_img.clone(), args).detach().permute(0, 2, 3, 1).cpu().numpy()
+    target_np = target_mask.detach().cpu().numpy()
+
+    out_dir = os.path.join(args.save_path_ip, 'fid_kid_images', 'boundary_comparison')
+    os.makedirs(out_dir, exist_ok=True)
+    kernel = np.ones((3, 3), np.uint8)
+
+    for i in range(real_np.shape[0]):
+        left = np.clip(real_np[i] * 255.0, 0, 255).astype(np.uint8).copy()
+        right = np.clip(recon_np[i] * 255.0, 0, 255).astype(np.uint8).copy()
+
+        b_target = _seg_boundary_mask(target_np[i])
+        if dilate > 0:
+            b_target = cv2.dilate(b_target.astype(np.uint8), kernel,
+                                  iterations=dilate).astype(bool)
+
+        left[b_target] = [255, 0, 0]
+        right[b_target] = [255, 0, 0]
+
+        canvas = np.concatenate([left, right], axis=1)
+        global_idx = batch_offset + i
+        cv2.imwrite(os.path.join(out_dir, f'{global_idx:06d}.png'),
+                    cv2.cvtColor(canvas, cv2.COLOR_RGB2BGR))
+
+
+def compute_segmentation_scores(target_mask, pred_mask, args, iter='final'):
+    """mIoU, mean Dice, pixel accuracy, and boundary F1 between
+    target_mask and pred_mask (both [B,H,W] int label maps), computed
+    per-image then appended to per-batch text files -- same convention as
+    compute_psnr (one file per metric per batch, averaged later by
+    compute_average_segmentation_scores)."""
+    num_classes = int(getattr(args, 'seg_num_classes', 19))
+    t = target_mask.detach().cpu().numpy()
+    p = pred_mask.detach().cpu().numpy()
+
+    per_image = {'miou': [], 'dice': [], 'pixel_acc': [], 'boundary_f1': []}
+
+    for i in range(t.shape[0]):
+        ti, pi = t[i], p[i]
+        ious, dices = [], []
+        for c in range(num_classes):
+            t_c = (ti == c)
+            p_c = (pi == c)
+            union = np.logical_or(t_c, p_c).sum()
+            if union == 0:
+                continue  # class absent from both target and pred -> skip
+            inter = np.logical_and(t_c, p_c).sum()
+            ious.append(inter / union)
+            denom = t_c.sum() + p_c.sum()
+            dices.append(2 * inter / denom if denom > 0 else 1.0)
+
+        per_image['miou'].append(float(np.mean(ious)) if ious else float('nan'))
+        per_image['dice'].append(float(np.mean(dices)) if dices else float('nan'))
+        per_image['pixel_acc'].append(float((ti == pi).mean()))
+        per_image['boundary_f1'].append(_boundary_f1(ti, pi))
+
+    for name, values in per_image.items():
+        filename = os.path.join(args.save_path_ip, f'{name}_batch{args.batch}.txt')
+        with open(filename, 'a') as f:
+            for v in values:
+                f.write(f'{iter} {v}\n')
+
+
+def compute_average_segmentation_scores(args):
+    """Averages mIoU/Dice/pixel-accuracy/boundary-F1 across all batches,
+    mirroring compute_average_psnr's file layout and NaN/'final'-safe
+    parsing."""
+    dict_scores = {}
+    for name in ['miou', 'dice', 'pixel_acc', 'boundary_f1']:
+        by_iteration = defaultdict(list)
+        for batch in range(args.max_batch):
+            filename = os.path.join(args.save_path_ip, f'{name}_batch{batch}.txt')
+            if not os.path.exists(filename):
+                continue
+            with open(filename, 'r') as f:
+                for line in f:
+                    iter_str, val_str = line.strip().split()
+                    val = float(val_str)
+                    if np.isnan(val):
+                        continue
+                    try:
+                        iteration_key = int(float(iter_str))
+                    except ValueError:
+                        iteration_key = iter_str
+                    by_iteration[iteration_key].append(val)
+
+        averages = {iteration: np.mean(vals)
+                    for iteration, vals in by_iteration.items()}
+
+        avg_filename = os.path.join(args.save_path_ip, f'{name}_average.txt')
+        with open(avg_filename, 'a') as f:
+            for iteration, avg_val in sorted(
+                    averages.items(), key=lambda kv: (isinstance(kv[0], str), kv[0])):
+                f.write(f'{iteration} {avg_val:.4f}\n')
+
+        with open(avg_filename, 'r') as file:
+            lines = file.readlines()
+            values = [float(line.split()[1]) for line in lines]
+            dict_scores[name] = values[-1] if values else float('nan')
+
+    filename = os.path.join(args.save_path, 'final_segmentation_scores.txt')
+    with open(filename, 'a') as file:
+        if os.stat(filename).st_size == 0:
+            for key in dict_scores.keys():
+                file.write(f'{key} ')
+            for key in args.dict_cfg_method.keys():
+                file.write(f'{key} ')
+            file.write('\n')
+
+        for value in dict_scores.values():
+            file.write(f'{value} ')
+        for value in args.dict_cfg_method.values():
+            file.write(f'{value} ')
+        file.write('\n')
+
+
 def preprocess(img, args):
     if args.model == "rectified":
         import pnpflow.image_generation.datasets as datasets

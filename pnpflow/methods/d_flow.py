@@ -218,6 +218,21 @@ class D_FLOW(object):
                     utils.save_recon_for_fid(
                         clean_img, restored_img, self.args,
                         batch_offset=batch * self.args.batch_size_ip)
+
+                    with torch.no_grad():
+                        pred_mask = H(restored_img.to(self.device)).argmax(dim=1)
+
+                    utils.save_segmentation_masks(
+                        noisy_img, pred_mask, self.args,
+                        batch_offset=batch * self.args.batch_size_ip)
+                    utils.compute_segmentation_scores(
+                        noisy_img, pred_mask, self.args, iter='final')
+
+                    if batch < 4:
+                        utils.save_boundary_comparison(
+                            clean_img, restored_img, noisy_img, pred_mask,
+                            self.args, batch_offset=batch * self.args.batch_size_ip)
+
                 del restored_img
 
             del noisy_img, clean_img, x, z
@@ -226,6 +241,8 @@ class D_FLOW(object):
             utils.compute_average_psnr(self.args)
             utils.compute_average_ssim(self.args)
             utils.compute_average_lpips(self.args)
+        if getattr(degradation, 'is_segmentation', False) and self.args.save_results:
+            utils.compute_average_segmentation_scores(self.args)
         if self.args.compute_memory:
             utils.compute_average_memory(self.args)
         if self.args.compute_time:
