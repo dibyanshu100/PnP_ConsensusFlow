@@ -12,7 +12,7 @@ BATCH_SIZE_IP="${BATCH_SIZE_IP:-4}"
 
 SEED="${SEED:-42}"
 
-TOTAL=84
+TOTAL=90
 RUN_NUM=0
 FAILED=0
 FAILED_LABELS=()
@@ -70,6 +70,9 @@ run() {
 # run "celeba / inpainting / flow_dps" \
 #   python main.py --opts method flow_dps dataset celeba problem inpainting steps_ode 100 grad_steps 3 grad_step_size 2.0 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
+run "celeba / inpainting / flower" \
+  python main.py --opts method flower dataset celeba problem inpainting steps 100 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
 
 # # ===== celeba / random_inpainting =====
 # run "celeba / random_inpainting / pnp_flow_admm[adaptive]" \
@@ -96,6 +99,9 @@ run() {
 # run "celeba / random_inpainting / flow_dps" \
 #   python main.py --opts method flow_dps dataset celeba problem random_inpainting steps_ode 100 grad_steps 3 grad_step_size 3.0 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
+run "celeba / random_inpainting / flower" \
+  python main.py --opts method flower dataset celeba problem random_inpainting steps 100 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
 
 # # ===== celeba / superresolution =====
 # run "celeba / superresolution / pnp_flow_admm[adaptive]" \
@@ -121,6 +127,9 @@ run() {
 
 # run "celeba / superresolution / flow_dps" \
 #   python main.py --opts method flow_dps dataset celeba problem superresolution steps_ode 100 grad_steps 3 grad_step_size 2.5 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "celeba / superresolution / flower" \
+  python main.py --opts method flower dataset celeba problem superresolution steps 100 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
 
 # # ===== celeba / phase_retrieval =====
@@ -208,6 +217,9 @@ run() {
 # run "afhq_cat / inpainting / flow_dps" \
 #   python main.py --opts method flow_dps dataset afhq_cat problem inpainting steps_ode 100 grad_steps 3 grad_step_size 2.0 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
+run "afhq_cat / inpainting / flower" \
+  python main.py --opts method flower dataset afhq_cat problem inpainting steps 100 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
 
 # # ===== afhq_cat / random_inpainting =====
 # run "afhq_cat / random_inpainting / pnp_flow_admm[adaptive]" \
@@ -234,6 +246,9 @@ run() {
 # run "afhq_cat / random_inpainting / flow_dps" \
 #   python main.py --opts method flow_dps dataset afhq_cat problem random_inpainting steps_ode 100 grad_steps 3 grad_step_size 3.0 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
+run "afhq_cat / random_inpainting / flower" \
+  python main.py --opts method flower dataset afhq_cat problem random_inpainting steps 100 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
 
 # ===== afhq_cat / superresolution =====
 # run "afhq_cat / superresolution / pnp_flow_admm[adaptive]" \
@@ -259,6 +274,9 @@ run() {
 
 # run "afhq_cat / superresolution / flow_dps" \
 #   python main.py --opts method flow_dps dataset afhq_cat problem superresolution steps_ode 500 grad_steps 3 grad_step_size 2.5 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+run "afhq_cat / superresolution / flower" \
+  python main.py --opts method flower dataset afhq_cat problem superresolution steps 500 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
 
 # # ===== afhq_cat / phase_retrieval =====

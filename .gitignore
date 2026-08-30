@@ -218,3 +218,4 @@ all_old_results/
 sweep_logs/
 \results_final_simple
 \results_final_difficult
+\results_segmentation

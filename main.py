@@ -28,6 +28,7 @@ from pnpflow.methods.d_flow import D_FLOW
 from pnpflow.methods.ot_ode import OT_ODE
 from pnpflow.methods.flow_priors import FLOW_PRIORS
 from pnpflow.methods.flow_dps import FLOW_DPS
+from pnpflow.methods.flower import FLOWER
 from pnpflow.utils import gaussian_blur, define_model, load_model
 import warnings
 warnings.filterwarnings("ignore")
@@ -305,13 +306,13 @@ def main():
             method = FLOW_PRIORS(model, device, args)
         elif args.method == 'flow_dps':
             method = FLOW_DPS(model, device, args)
+        elif args.method == 'flower':
+            method = FLOWER(model, device, args)
+
         else:
             raise ValueError("The method your entered does not exist")
 
-        if not degradation.is_linear and args.method in ('ot_ode', 'flow_priors'):
-            # These two baselines rely on a Gaussian-conditional derivation
-            # that requires H to be linear (see discussion in README); they
-            # have not been extended to nonlinear problems here.
+        if not degradation.is_linear and args.method in ('ot_ode', 'flow_priors', 'flower'):
             raise ValueError(
                 f"Method '{args.method}' is only implemented for linear forward "
                 f"operators and cannot be run on problem '{args.problem}'. "
