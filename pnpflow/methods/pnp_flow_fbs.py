@@ -156,14 +156,19 @@ class PNP_FLOW_FBS(object):
                             x_new /= num_samples
                             x = x_new
                         else:
-                            # print("PNP-FBS with adaptive projection (our projection mechanism)")
-                            z_tilde = self.interpolation_step(z, t1.view(-1, 1, 1, 1),gauss_noise)
-                            x = self.denoiser(z_tilde, t1)
-                            gauss_noise_1 = (z_tilde - x*t1.view(-1, 1, 1, 1))/ ((1-t1.view(-1, 1, 1, 1)) + 1e-12)
-                            gauss_noise_2 = torch.randn_like(x)
+                            x_new = torch.zeros_like(x)
                             w1 = t1.view(-1, 1, 1, 1)
                             w2 = 1 - t1.view(-1, 1, 1, 1)
-                            gauss_noise = (w2 * gauss_noise_2 + w1 * gauss_noise_1) / torch.sqrt(w1**2 + w2**2 + 1e-12)
+                            # print("PNP-FBS with adaptive projection (our projection mechanism)")
+                            for _ in range(num_samples):
+                                z_tilde = self.interpolation_step(z, t1.view(-1, 1, 1, 1),gauss_noise)
+                                x = self.denoiser(z_tilde, t1)
+                                gauss_noise_1 = (z_tilde - x*t1.view(-1, 1, 1, 1))/ ((1-t1.view(-1, 1, 1, 1)) + 1e-12)
+                                gauss_noise_2 = torch.randn_like(x)
+                                gauss_noise = (w2 * gauss_noise_2 + w1 * gauss_noise_1) / torch.sqrt(w1**2 + w2**2 + 1e-12)
+                                x_new = x_new + x
+                            x_new /= num_samples
+                            x = x_new
 
 
                         if self.args.compute_time:

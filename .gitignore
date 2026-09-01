@@ -219,3 +219,4 @@ sweep_logs/
 \results_final_simple
 \results_final_difficult
 \results_segmentation
+\results_primal_convergence

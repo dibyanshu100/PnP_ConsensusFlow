@@ -51,48 +51,48 @@ run() {
 
 
 # ===== celeba =====
-run "celeba / inpainting / pnp_flow_admm[adaptive]" \
-  python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 100 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm True early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+# run "celeba / inpainting / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 100 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm True early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-run "celeba / random_inpainting / pnp_flow_admm[adaptive]" \
-  python main.py --opts method pnp_flow_admm dataset celeba problem random_inpainting steps_pnp 100 rho_admm 100 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm True early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+# run "celeba / random_inpainting / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset celeba problem random_inpainting steps_pnp 100 rho_admm 100 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm True early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-run "celeba / superresolution / pnp_flow_admm[adaptive]" \
-  python main.py --opts method pnp_flow_admm dataset celeba problem superresolution steps_pnp 100 rho_admm 50 beta_rho 1.3 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm True early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+# run "celeba / superresolution / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset celeba problem superresolution steps_pnp 100 rho_admm 50 beta_rho 1.3 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm True early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-run "celeba / phase_retrieval / pnp_flow_admm[adaptive]" \
-  python main.py --opts method pnp_flow_admm dataset celeba problem phase_retrieval steps_pnp 100 rho_admm 1500 beta_rho 1.8 t_schedule_gamma 1.5 num_denoiser_calls 5 save_norms_admm True early_stopping False admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+# run "celeba / phase_retrieval / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset celeba problem phase_retrieval steps_pnp 100 rho_admm 1500 beta_rho 1.8 t_schedule_gamma 1.5 num_denoiser_calls 5 save_norms_admm True early_stopping False admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-run "celeba / hdr_reconstruction / pnp_flow_admm[adaptive]" \
-  python main.py --opts method pnp_flow_admm dataset celeba problem hdr_reconstruction steps_pnp 100 rho_admm 100 beta_rho 1.5 t_schedule_gamma 0.2 num_denoiser_calls 5 save_norms_admm True early_stopping False admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+# run "celeba / hdr_reconstruction / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset celeba problem hdr_reconstruction steps_pnp 100 rho_admm 100 beta_rho 1.5 t_schedule_gamma 0.2 num_denoiser_calls 5 save_norms_admm True early_stopping False admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
 run "celeba / nonlinear_deblurring / pnp_flow_admm[adaptive]" \
-  python main.py --opts method pnp_flow_admm dataset celeba problem nonlinear_deblurring steps_pnp 500 rho_admm 100 beta_rho 1.5 t_schedule_gamma 1.5 num_denoiser_calls 1 save_norms_admm True early_stopping True admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+  python main.py --opts method pnp_flow_admm dataset celeba problem nonlinear_deblurring steps_pnp 100 rho_admm 100 beta_rho 1.5 t_schedule_gamma 1.5 num_denoiser_calls 1 save_norms_admm True early_stopping False admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
 
 # ===== afhq_cat =====
-run "afhq_cat / inpainting / pnp_flow_admm[adaptive]" \
-  python main.py --opts method pnp_flow_admm dataset afhq_cat problem inpainting steps_pnp 100 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.5 num_denoiser_calls 5 save_norms_admm True early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+# run "afhq_cat / inpainting / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset afhq_cat problem inpainting steps_pnp 100 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.5 num_denoiser_calls 5 save_norms_admm True early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-run "afhq_cat / random_inpainting / pnp_flow_admm[adaptive]" \
-  python main.py --opts method pnp_flow_admm dataset afhq_cat problem random_inpainting steps_pnp 100 rho_admm 100 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm True early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+# run "afhq_cat / random_inpainting / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset afhq_cat problem random_inpainting steps_pnp 100 rho_admm 100 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm True early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-run "afhq_cat / superresolution / pnp_flow_admm[adaptive]" \
-  python main.py --opts method pnp_flow_admm dataset afhq_cat problem superresolution steps_pnp 500 rho_admm 50 beta_rho 1.3 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm True early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+# run "afhq_cat / superresolution / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset afhq_cat problem superresolution steps_pnp 100 rho_admm 50 beta_rho 1.3 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm True early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-run "afhq_cat / phase_retrieval / pnp_flow_admm[adaptive]" \
-  python main.py --opts method pnp_flow_admm dataset afhq_cat problem phase_retrieval steps_pnp 300 rho_admm 1500 beta_rho 2.2 t_schedule_gamma 1.9 num_denoiser_calls 5 save_norms_admm True early_stopping False admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+# run "afhq_cat / phase_retrieval / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset afhq_cat problem phase_retrieval steps_pnp 100 rho_admm 1500 beta_rho 2.2 t_schedule_gamma 1.9 num_denoiser_calls 5 save_norms_admm True early_stopping False admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-run "afhq_cat / hdr_reconstruction / pnp_flow_admm[adaptive]" \
-  python main.py --opts method pnp_flow_admm dataset afhq_cat problem hdr_reconstruction steps_pnp 100 rho_admm 500 beta_rho 1.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm True early_stopping False admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+# run "afhq_cat / hdr_reconstruction / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset afhq_cat problem hdr_reconstruction steps_pnp 100 rho_admm 500 beta_rho 1.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm True early_stopping False admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
 run "afhq_cat / nonlinear_deblurring / pnp_flow_admm[adaptive]" \
-  python main.py --opts method pnp_flow_admm dataset afhq_cat problem nonlinear_deblurring steps_pnp 500 rho_admm 100 beta_rho 1.5 t_schedule_gamma 1.5 num_denoiser_calls 1 save_norms_admm True early_stopping True admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+  python main.py --opts method pnp_flow_admm dataset afhq_cat problem nonlinear_deblurring steps_pnp 100 rho_admm 100 beta_rho 1.5 t_schedule_gamma 1.5 num_denoiser_calls 1 save_norms_admm True early_stopping False admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
 
 # ===== celebahq / segmentation =====
-run "celebahq / segmentation / pnp_flow_admm" \
-  python main.py --opts dataset celebahq dim_image 128 problem segmentation method pnp_flow_admm steps_pnp 500 rho_admm 500 beta_rho 0.0 t_schedule_gamma 1.0 num_denoiser_calls 1 save_norms_admm True early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP"
+# run "celebahq / segmentation / pnp_flow_admm" \
+#   python main.py --opts dataset celebahq dim_image 128 problem segmentation method pnp_flow_admm steps_pnp 500 rho_admm 500 beta_rho 0.0 t_schedule_gamma 1.0 num_denoiser_calls 1 save_norms_admm True early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP"
 
 
 printf '\n============================================================\n'

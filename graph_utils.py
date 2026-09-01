@@ -38,8 +38,6 @@ def plot_rho_analysis(
     "random_inpainting": "Random Inpainting",
     "superresolution": "Superresolution",
 }
-
-    # Paper-friendly global font sizes
     plt.rcParams.update({
         "font.size": 16,
         "axes.titlesize": 20,
@@ -577,6 +575,10 @@ METHOD_LABELS = {
     "paintbrush_inpainting": "Paintbrush Inpainting",
     "random_inpainting": "Random Inpainting",
     "superresolution": "Superresolution",
+    "phase_retrieval": "Phase Retrieval",
+    "hdr_reconstruction": "HDR Reconstruction",
+    "nonlinear_deblurring": "Nonlinear Deblurring",
+    "segmentation": "Segmentation",
 }
 
 
@@ -630,9 +632,10 @@ def plot_convergence_two_datasets_shared_legend(
     batch: int = 0,
     save_path: Path = None,
     logy: bool = True,
+    metrics=("primal_res", "dual_res"),
 ):
     plt.rcParams.update({
-        "font.size": 16,
+        "font.size": 15,
         "axes.titlesize": 22,
         "axes.labelsize": 22,
         "xtick.labelsize": 15,
@@ -641,7 +644,7 @@ def plot_convergence_two_datasets_shared_legend(
         "figure.titlesize": 22,
     })
 
-    norm_config = {
+    all_norm_config = {
         "primal_res": (
             "Primal Residual",
             r"$\|x^k - z^k\|_2$",
@@ -651,30 +654,34 @@ def plot_convergence_two_datasets_shared_legend(
             r"$\rho\|z^k - z^{k-1}\|_2$",
         ),
     }
+    norm_config = {key: all_norm_config[key] for key in metrics}
 
-    n_rows = len(root_dirs)
-    n_cols = len(norm_config)
+    # Rows = metrics, columns = datasets, so datasets lay out left-to-right
+    # in a single row when only one metric is requested.
+    n_rows = len(norm_config)
+    n_cols = len(root_dirs)
 
     fig, axes = plt.subplots(
         n_rows,
         n_cols,
-        figsize=(8 * n_cols, 5.5 * n_rows),
+        figsize=(8.5 * n_cols, 7.5 * n_rows),
         sharex=False,
+        squeeze=False,
     )
-
-    if n_rows == 1:
-        axes = [axes]
 
     all_handles = {}
     plotted_any = False
 
-    for row_idx, (root_dir, dataset_name) in enumerate(zip(root_dirs, dataset_names)):
-        norms_dict = collect_norms_across_methods(root_dir=root_dir, batch=batch)
+    norms_by_dataset = {
+        dataset_name: collect_norms_across_methods(root_dir=root_dir, batch=batch)
+        for root_dir, dataset_name in zip(root_dirs, dataset_names)
+    }
 
-        for col_idx, (norm_key, (norm_title, ylabel)) in enumerate(norm_config.items()):
+    for row_idx, (norm_key, (norm_title, ylabel)) in enumerate(norm_config.items()):
+        for col_idx, dataset_name in enumerate(dataset_names):
             ax = axes[row_idx][col_idx]
 
-            curves = norms_dict.get(norm_key, {})
+            curves = norms_by_dataset[dataset_name].get(norm_key, {})
 
             for method_name, values in sorted(curves.items()):
                 line, = ax.plot(
