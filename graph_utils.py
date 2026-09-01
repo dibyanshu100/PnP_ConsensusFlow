@@ -791,6 +791,139 @@ def extract_time_memory_summary(root_dir: Path) -> pd.DataFrame:
     return df
 
 
+#############################################################################################################################
+# PnP-FBS (adaptive vs non-adaptive) vs PnP-ADMM: PSNR vs number of steps
+
+def _read_psnr_vs_steps(file_path: Path, y_col: str = "psnr_rec") -> pd.DataFrame:
+    if not file_path.exists():
+        print(f"[WARNING] File not found: {file_path}")
+        return None
+
+    df = safe_read_table(file_path)
+    if df.empty or "steps_pnp" not in df.columns or y_col not in df.columns:
+        print(f"[WARNING] Missing required columns in {file_path}")
+        return None
+
+    df["steps_pnp"] = pd.to_numeric(df["steps_pnp"], errors="coerce")
+    df[y_col] = pd.to_numeric(df[y_col], errors="coerce")
+
+    if "adaptive_noise" in df.columns:
+        df["adaptive_noise"] = df["adaptive_noise"].apply(normalize_bool)
+
+    df = df.dropna(subset=["steps_pnp", y_col]).sort_values("steps_pnp")
+    return df
+
+
+def plot_fbs_vs_admm_psnr_vs_steps(
+    base_dir,
+    dataset_name,
+    tasks,
+    y_col: str = "psnr_rec",
+    ylabel: str = "PSNR",
+    save_name: str = "fbs_vs_admm_psnr_vs_steps.png",
+):
+    """
+    For each task, plot `ylabel` vs steps_pnp for three series:
+      - PnP-FBS with adaptive_noise=True
+      - PnP-FBS with adaptive_noise=False
+      - PnP-ADMM (ours)
+
+    Reads `final_psnr.txt` (or equivalent metric file, via y_col) from
+    base_dir/<task>/pnp_flow_fbs/test and base_dir/<task>/pnp_flow_admm/test.
+    """
+    base_dir = Path(base_dir)
+    metric_filename = {"psnr_rec": "final_psnr.txt", "ssim_rec": "final_ssim.txt", "lpips_rec": "final_lpips.txt"}.get(y_col, "final_psnr.txt")
+
+    plt.rcParams.update({
+        "font.size": 16,
+        "axes.titlesize": 20,
+        "axes.labelsize": 20,
+        "xtick.labelsize": 18,
+        "ytick.labelsize": 18,
+        "legend.fontsize": 18,
+        "figure.titlesize": 22,
+    })
+
+    series_style = {
+        "PnP-FBS (adaptive)": dict(color="tab:blue", marker="o"),
+        "PnP-FBS (non-adaptive)": dict(color="tab:orange", marker="s"),
+        "PnP-ADMM (ours)": dict(color="tab:green", marker="^"),
+    }
+
+    n_cols = len(tasks)
+    fig, axes = plt.subplots(1, n_cols, figsize=(7 * n_cols, 5.5), squeeze=False)
+    axes = axes[0]
+
+    all_handles = {}
+    plotted_any = False
+
+    for col_idx, task in enumerate(tasks):
+        ax = axes[col_idx]
+        task_dir = base_dir / task
+
+        fbs_df = _read_psnr_vs_steps(task_dir / "pnp_flow_fbs" / "test" / metric_filename, y_col)
+        admm_df = _read_psnr_vs_steps(task_dir / "pnp_flow_admm" / "test" / metric_filename, y_col)
+
+        if fbs_df is not None and "adaptive_noise" in fbs_df.columns:
+            for adaptive_value, label in [(True, "PnP-FBS (adaptive)"), (False, "PnP-FBS (non-adaptive)")]:
+                sub_df = fbs_df[fbs_df["adaptive_noise"] == adaptive_value]
+                if sub_df.empty:
+                    continue
+                style = series_style[label]
+                line, = ax.plot(
+                    sub_df["steps_pnp"],
+                    sub_df[y_col],
+                    linewidth=2.8,
+                    markersize=7,
+                    label=label,
+                    **style,
+                )
+                all_handles[label] = line
+                plotted_any = True
+
+        if admm_df is not None and not admm_df.empty:
+            label = "PnP-ADMM (ours)"
+            style = series_style[label]
+            line, = ax.plot(
+                admm_df["steps_pnp"],
+                admm_df[y_col],
+                linewidth=2.8,
+                markersize=7,
+                label=label,
+                **style,
+            )
+            all_handles[label] = line
+            plotted_any = True
+
+        ax.set_xlabel("Number of steps")
+        ax.set_ylabel(ylabel)
+        ax.set_title(f"{dataset_name} — {METHOD_LABELS.get(task, task)}", pad=12)
+        ax.grid(True, alpha=0.3)
+        ax.tick_params(axis="both")
+
+    if not plotted_any:
+        print("[WARNING] Nothing was plotted")
+        plt.close()
+        return
+
+    fig.legend(
+        all_handles.values(),
+        all_handles.keys(),
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.05),
+        ncol=3,
+        frameon=False,
+    )
+
+    plt.tight_layout(rect=[0, 0.1, 1, 0.98])
+
+    out_path = Path(save_name)
+    plt.savefig(out_path, dpi=300, bbox_inches="tight")
+    plt.show()
+
+    print(f"Saved: {out_path}")
+
+
 def save_time_memory_summary(df: pd.DataFrame, xlsx_path: str, csv_path: str = None):
     if csv_path is not None:
         df.to_csv(csv_path, index=False)
