@@ -494,6 +494,11 @@ class PNP_FLOW_ADMM(object):
                 u = torch.zeros_like(x)
                 gauss_noise = x.clone()
 
+                if a.save_norms_admm and restart == 0:
+                    u_norm_list = []
+                    res_norm_list = []
+                    dual_res_list = []
+
                 for iteration in range(steps):
                     t_linear = delta * iteration
                     t_val = t_linear ** gamma
@@ -542,6 +547,11 @@ class PNP_FLOW_ADMM(object):
                         dual_res = (rho_t * torch.norm(z - z_prev)).item()
                         u_inc = torch.norm(u - u_prev).item()
 
+                        if a.save_norms_admm and restart == 0:
+                            res_norm_list.append(primal_res)
+                            dual_res_list.append(dual_res)
+                            u_norm_list.append(u_inc)
+
                         if iteration % 50 == 0 or iteration == steps - 1:
                             print(f"Iter {iteration}: rho_t={rho_t:.4f}, ||x-z||={primal_res:.4f}, "
                                   f"rho_t||z-z_prev||={dual_res:.4f}, ||u-u_prev||={u_inc:.4f}")
@@ -562,6 +572,9 @@ class PNP_FLOW_ADMM(object):
                     print(f"  [restart {restart}] per-image final CE: {ce_final.tolist()}")
 
             z = best_z
+
+            if a.save_norms_admm:
+                self.save_norms(res_norm_list, dual_res_list, u_norm_list, batch)
 
             if a.save_results:
                 clean_img_cpu = clean_img.to('cpu')

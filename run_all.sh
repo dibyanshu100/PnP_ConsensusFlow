@@ -275,8 +275,8 @@ run "afhq_cat / random_inpainting / flower" \
 # run "afhq_cat / superresolution / flow_dps" \
 #   python main.py --opts method flow_dps dataset afhq_cat problem superresolution steps_ode 500 grad_steps 3 grad_step_size 2.5 use_stochastic_noise True model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-run "afhq_cat / superresolution / flower" \
-  python main.py --opts method flower dataset afhq_cat problem superresolution steps 500 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+# run "afhq_cat / superresolution / flower" \
+#   python main.py --opts method flower dataset afhq_cat problem superresolution steps 500 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
 
 # # ===== afhq_cat / phase_retrieval =====
