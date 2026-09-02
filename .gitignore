@@ -220,3 +220,4 @@ sweep_logs/
 \results_final_difficult
 \results_segmentation
 \results_primal_convergence
+\results_dual_analysis

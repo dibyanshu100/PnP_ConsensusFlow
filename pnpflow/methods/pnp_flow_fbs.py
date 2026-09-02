@@ -267,7 +267,8 @@ class PNP_FLOW_FBS(object):
             utils.compute_average_time(self.args)
 
     def should_save_image(self, iteration, steps):
-        return iteration % (steps // 10) == 0
+        save_interval = max(1, int(steps) // 10)
+        return iteration % save_interval == 0
 
     def run_method(self, data_loaders, degradation, sigma_noise, H_funcs=None):
 

@@ -814,25 +814,39 @@ def _read_psnr_vs_steps(file_path: Path, y_col: str = "psnr_rec") -> pd.DataFram
     return df
 
 
+METRIC_INFO = {
+    "psnr": ("final_psnr.txt", "psnr_rec", "PSNR"),
+    "ssim": ("final_ssim.txt", "ssim_rec", "SSIM"),
+    "lpips": ("final_lpips.txt", "lpips_rec", "LPIPS"),
+}
+
+
 def plot_fbs_vs_admm_psnr_vs_steps(
     base_dir,
     dataset_name,
     tasks,
-    y_col: str = "psnr_rec",
-    ylabel: str = "PSNR",
-    save_name: str = "fbs_vs_admm_psnr_vs_steps.png",
+    metric: str = "psnr",
+    save_name: str = None,
 ):
     """
-    For each task, plot `ylabel` vs steps_pnp for three series:
+    For each task, plot `metric` vs steps_pnp for three series:
       - PnP-FBS with adaptive_noise=True
       - PnP-FBS with adaptive_noise=False
       - PnP-ADMM (ours)
 
-    Reads `final_psnr.txt` (or equivalent metric file, via y_col) from
-    base_dir/<task>/pnp_flow_fbs/test and base_dir/<task>/pnp_flow_admm/test.
+    `metric` is one of "psnr", "ssim", "lpips" and determines which
+    final_<metric>.txt file is read from base_dir/<task>/pnp_flow_fbs/test
+    and base_dir/<task>/pnp_flow_admm/test.
     """
+    if metric not in METRIC_INFO:
+        raise ValueError(f"Unknown metric '{metric}'. Choose from {list(METRIC_INFO)}.")
+
+    metric_filename, y_col, ylabel = METRIC_INFO[metric]
+
+    if save_name is None:
+        save_name = f"fbs_vs_admm_{metric}_vs_steps.png"
+
     base_dir = Path(base_dir)
-    metric_filename = {"psnr_rec": "final_psnr.txt", "ssim_rec": "final_ssim.txt", "lpips_rec": "final_lpips.txt"}.get(y_col, "final_psnr.txt")
 
     plt.rcParams.update({
         "font.size": 16,
@@ -916,6 +930,143 @@ def plot_fbs_vs_admm_psnr_vs_steps(
     )
 
     plt.tight_layout(rect=[0, 0.1, 1, 0.98])
+
+    out_path = Path(save_name)
+    plt.savefig(out_path, dpi=300, bbox_inches="tight")
+    plt.show()
+
+    print(f"Saved: {out_path}")
+
+
+#############################################################################################################################
+# PnP-FBS vs PnP-ADMM: per-iteration metric convergence (from <metric>_rec_average.txt)
+
+CONVERGENCE_METRIC_INFO = {
+    "psnr": ("psnr_rec_average.txt", "PSNR"),
+    "ssim": ("ssim_rec_average.txt", "SSIM"),
+    "lpips": ("lpips_rec_average.txt", "LPIPS"),
+}
+
+
+def _resolve_average_file(path, filename: str) -> Path:
+    path = Path(path)
+    if path.suffix == ".txt":
+        return path
+    return path / filename
+
+
+def _read_metric_convergence(path, filename: str) -> pd.DataFrame:
+    file_path = _resolve_average_file(path, filename)
+
+    if not file_path.exists():
+        print(f"[WARNING] File not found: {file_path}")
+        return None
+
+    df = pd.read_csv(file_path, sep=r"\s+", header=None, names=["iteration", "value"])
+    df["iteration"] = pd.to_numeric(df["iteration"], errors="coerce")
+    df["value"] = pd.to_numeric(df["value"], errors="coerce")
+    df = df.dropna(subset=["iteration", "value"]).sort_values("iteration")
+
+    return df
+
+
+def plot_fbs_vs_admm_psnr_convergence(
+    runs,
+    metric: str = "psnr",
+    save_name: str = None,
+):
+    """
+    Plot the per-iteration metric convergence curve (from
+    <metric>_rec_average.txt) for a PnP-FBS run against a PnP-ADMM run, one
+    subplot per entry in `runs`.
+
+    `metric` is one of "psnr", "ssim", "lpips".
+
+    `runs` is a list of dicts, each with:
+      - "title": subplot title (e.g. "CELEBA — Box Inpainting")
+      - "fbs_dir": PnP-FBS run's leaf hyperparameter directory, OR the full
+                    path to its <metric>_rec_average.txt
+      - "admm_dir": same, for the PnP-ADMM run
+
+    Example:
+        gu.plot_fbs_vs_admm_psnr_convergence(
+            runs=[{
+                "title": "CELEBA — Box Inpainting (steps=100)",
+                "fbs_dir": Path("results/celeba/ot/inpainting/pnp_flow_fbs/test/"
+                                 "steps_pnp=100/lr_pnp=1.0/gamma_style=alpha_1_minus_t/"
+                                 "num_samples=5/alpha=0.5/adaptive_noise=True"),
+                "admm_dir": Path("results/celeba/ot/inpainting/pnp_flow_admm/test/"
+                                  "steps_pnp=100/rho_admm=50/max_cgiter=10/cg_tol=1e-05/"
+                                  "save_norms_admm=False/adaptive_noise=True/"
+                                  "deterministic_noise=False/t_schedule_gamma=1.0/"
+                                  "admm_gd_steps=10/beta_rho=2.5/early_stopping=False/"
+                                  "num_denoiser_calls=5"),
+            }],
+            metric="ssim",
+        )
+    """
+    if metric not in CONVERGENCE_METRIC_INFO:
+        raise ValueError(f"Unknown metric '{metric}'. Choose from {list(CONVERGENCE_METRIC_INFO)}.")
+
+    filename, ylabel = CONVERGENCE_METRIC_INFO[metric]
+
+    if save_name is None:
+        save_name = f"fbs_vs_admm_{metric}_convergence.png"
+
+    plt.rcParams.update({
+        "font.size": 16,
+        "axes.titlesize": 20,
+        "axes.labelsize": 20,
+        "xtick.labelsize": 18,
+        "ytick.labelsize": 18,
+        "legend.fontsize": 18,
+        "figure.titlesize": 22,
+    })
+
+    series_style = {
+        "without dual": dict(color="tab:blue", marker="o"),
+        "with dual": dict(color="tab:green", marker="^"),
+    }
+
+    n_cols = len(runs)
+    fig, axes = plt.subplots(1, n_cols, figsize=(7 * n_cols, 5.5), squeeze=False)
+    axes = axes[0]
+
+    plotted_any = False
+
+    for col_idx, run in enumerate(runs):
+        ax = axes[col_idx]
+
+        fbs_df = _read_metric_convergence(run["fbs_dir"], filename)
+        admm_df = _read_metric_convergence(run["admm_dir"], filename)
+
+        for df, label in [(fbs_df, "without dual"), (admm_df, "with dual")]:
+            if df is None or df.empty:
+                continue
+            style = series_style[label]
+            ax.plot(
+                df["iteration"],
+                df["value"],
+                linewidth=2.8,
+                markersize=7,
+                label=label,
+                **style,
+            )
+            plotted_any = True
+
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel(ylabel)
+        ax.set_title(run.get("title", ""), pad=12)
+        ax.grid(True, alpha=0.3)
+        ax.tick_params(axis="both")
+        ax.legend(loc="lower right", frameon=True)
+
+    if not plotted_any:
+        print("[WARNING] Nothing was plotted")
+        plt.close()
+        return
+
+    plt.tight_layout()
 
     out_path = Path(save_name)
     plt.savefig(out_path, dpi=300, bbox_inches="tight")

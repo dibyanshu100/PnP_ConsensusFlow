@@ -306,6 +306,8 @@ class PNP_FLOW_ADMM(object):
                                     clean_img_cpu, noisy_img, restored_img, self.args, H_adj, iter=iteration
                                 )
 
+                                # utils.save_images(clean_img, noisy_img, restored_img, self.args, H_adj, iter=iteration)
+
                         if early_stopping:
                             if iteration >= max_steps:
                                 print(f"Stopping at iter {iteration}")

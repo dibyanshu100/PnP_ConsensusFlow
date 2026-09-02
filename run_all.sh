@@ -7,8 +7,12 @@ GPU="${GPU:-0}"
 export CUDA_VISIBLE_DEVICES="$GPU"
 
 START_BATCH="${START_BATCH:-0}"
-MAX_BATCH="${MAX_BATCH:-3}"
+MAX_BATCH="${MAX_BATCH:-25}"
 BATCH_SIZE_IP="${BATCH_SIZE_IP:-4}"
+
+# START_BATCH=6
+# MAX_BATCH=1
+# BATCH_SIZE_IP=1
 
 SEED="${SEED:-42}"
 
@@ -45,29 +49,51 @@ run() {
 }
 
 ############################################################################################## ablation runs ##############################################################################################
-# run "celeba / inpainting / pnp_flow_fbs" \
-#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 10 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise False
-
-# run "celeba / inpainting / pnp_flow_fbs" \
-#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 20 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise False
-
-# run "celeba / inpainting / pnp_flow_fbs" \
-#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 50 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise False
-
-# run "celeba / inpainting / pnp_flow_fbs" \
-#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 100 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise False
-
 run "celeba / inpainting / pnp_flow_fbs" \
-  python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 200 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise False
+  python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 100 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise True
+
+# run "celeba / inpainting / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 100 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
 
 # run "celeba / inpainting / pnp_flow_fbs" \
-#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 200 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise True
+#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 10 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise True
+
+# run "celeba / inpainting / pnp_flow_fbs" \
+#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 20 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise True
+
+# run "celeba / inpainting / pnp_flow_fbs" \
+#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 30 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise True
+
+# run "celeba / inpainting / pnp_flow_fbs" \
+#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 40 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise True
+
+# run "celeba / inpainting / pnp_flow_fbs" \
+#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 50 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise True
+
+# run "celeba / inpainting / pnp_flow_fbs" \
+#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 60 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise True
+
+# run "celeba / inpainting / pnp_flow_fbs" \
+#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 70 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise True
+
+# run "celeba / inpainting / pnp_flow_fbs" \
+#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 80 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise True
+
+# run "celeba / inpainting / pnp_flow_fbs" \
+#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 120 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise True
+
+# run "celeba / inpainting / pnp_flow_fbs" \
+#   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 150 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise True
+
+# # run "celeba / inpainting / pnp_flow_fbs" \
+# #   python main.py --opts method pnp_flow_fbs dataset celeba problem inpainting steps_pnp 200 lr_pnp 1.0 alpha 0.5 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise True
 
 # run "celeba / hdr_reconstruction / pnp_flow_fbs" \
 #   python main.py --opts method pnp_flow_fbs dataset celeba problem hdr_reconstruction steps_pnp 200 lr_pnp 1.0 alpha 0.3 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise False
 
-run "celeba / hdr_reconstruction / pnp_flow_fbs" \
-  python main.py --opts method pnp_flow_fbs dataset celeba problem hdr_reconstruction steps_pnp 200 lr_pnp 1.0 alpha 0.3 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise False
+# run "celeba / hdr_reconstruction / pnp_flow_fbs" \
+#   python main.py --opts method pnp_flow_fbs dataset celeba problem hdr_reconstruction steps_pnp 200 lr_pnp 1.0 alpha 0.3 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise False
 
 # run "celeba / hdr_reconstruction / pnp_flow_fbs" \
 #   python main.py --opts method pnp_flow_fbs dataset celeba problem hdr_reconstruction steps_pnp 100 lr_pnp 1.0 alpha 0.3 num_samples 5 model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True adaptive_noise False
@@ -101,19 +127,37 @@ run "celeba / hdr_reconstruction / pnp_flow_fbs" \
 #   python main.py --opts method pnp_flow_admm dataset celeba problem hdr_reconstruction steps_pnp 200 rho_admm 100 beta_rho 1.5 t_schedule_gamma 0.2 num_denoiser_calls 5 save_norms_admm False early_stopping False admm_gd_steps 10 adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
 # run "celeba / inpainting / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 5 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+# run "celeba / inpainting / pnp_flow_admm[adaptive]" \
 #   python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 10 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
 # run "celeba / inpainting / pnp_flow_admm[adaptive]" \
 #   python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 20 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
 # run "celeba / inpainting / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 30 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+# run "celeba / inpainting / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 40 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+# run "celeba / inpainting / pnp_flow_admm[adaptive]" \
 #   python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 50 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
 # run "celeba / inpainting / pnp_flow_admm[adaptive]" \
-#   python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 100 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+#   python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 60 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
-run "celeba / inpainting / pnp_flow_admm[adaptive]" \
-  python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 200 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+# run "celeba / inpainting / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 70 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+# run "celeba / inpainting / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 80 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+# run "celeba / inpainting / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 120 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
+
+# run "celeba / inpainting / pnp_flow_admm[adaptive]" \
+#   python main.py --opts method pnp_flow_admm dataset celeba problem inpainting steps_pnp 150 rho_admm 50 beta_rho 2.5 t_schedule_gamma 1.0 num_denoiser_calls 5 save_norms_admm False early_stopping False adaptive_noise True deterministic_noise False model ot train False eval True eval_split test noise_type gaussian seed "$SEED" start_batch "$START_BATCH" max_batch "$MAX_BATCH" batch_size_ip "$BATCH_SIZE_IP" compute_time True compute_memory True save_results True
 
 ############################################################################################## ablation runs ##############################################################################################
 
