@@ -646,7 +646,7 @@ def plot_convergence_two_datasets_shared_legend(
 
     all_norm_config = {
         "primal_res": (
-            "Primal Residual",
+            "Residual",
             r"$\|x^k - z^k\|_2$",
         ),
         "dual_res": (
@@ -656,10 +656,18 @@ def plot_convergence_two_datasets_shared_legend(
     }
     norm_config = {key: all_norm_config[key] for key in metrics}
 
+    if len(root_dirs) != len(dataset_names):
+        raise ValueError(
+            f"root_dirs and dataset_names must have the same length, "
+            f"got {len(root_dirs)} and {len(dataset_names)}"
+        )
+
+    dataset_pairs = list(zip(root_dirs, dataset_names))
+
     # Rows = metrics, columns = datasets, so datasets lay out left-to-right
     # in a single row when only one metric is requested.
     n_rows = len(norm_config)
-    n_cols = len(root_dirs)
+    n_cols = len(dataset_pairs)
 
     fig, axes = plt.subplots(
         n_rows,
@@ -674,11 +682,11 @@ def plot_convergence_two_datasets_shared_legend(
 
     norms_by_dataset = {
         dataset_name: collect_norms_across_methods(root_dir=root_dir, batch=batch)
-        for root_dir, dataset_name in zip(root_dirs, dataset_names)
+        for root_dir, dataset_name in dataset_pairs
     }
 
     for row_idx, (norm_key, (norm_title, ylabel)) in enumerate(norm_config.items()):
-        for col_idx, dataset_name in enumerate(dataset_names):
+        for col_idx, (_, dataset_name) in enumerate(dataset_pairs):
             ax = axes[row_idx][col_idx]
 
             curves = norms_by_dataset[dataset_name].get(norm_key, {})
@@ -1029,7 +1037,7 @@ def plot_fbs_vs_admm_psnr_convergence(
     }
 
     n_cols = len(runs)
-    fig, axes = plt.subplots(1, n_cols, figsize=(7 * n_cols, 5.5), squeeze=False)
+    fig, axes = plt.subplots(1, n_cols, figsize=(9.5 * n_cols, 5.5), squeeze=False)
     axes = axes[0]
 
     plotted_any = False
