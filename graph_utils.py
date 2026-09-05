@@ -1064,10 +1064,11 @@ def plot_fbs_vs_admm_psnr_convergence(
 
         ax.set_xlabel("Iteration")
         ax.set_ylabel(ylabel)
-        ax.set_title(run.get("title", ""), pad=12)
+        ax.set_title(f"{run.get('title', '')} — {metric.upper()}", pad=12)
         ax.grid(True, alpha=0.3)
         ax.tick_params(axis="both")
-        ax.legend(loc="lower right", frameon=True)
+        legend_loc = "upper right" if metric == "lpips" else "lower right"
+        ax.legend(loc=legend_loc, frameon=True)
 
     if not plotted_any:
         print("[WARNING] Nothing was plotted")
