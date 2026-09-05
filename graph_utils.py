@@ -588,12 +588,13 @@ def collect_norms_across_methods(root_dir: Path, batch: int = 0):
 
     if not norm_files:
         print(f"[WARNING] No {norm_file_name} files found under {root_dir}")
-        return {"primal_res": {}, "dual_res": {}, "u_inc": {}}
+        return {"primal_res": {}, "dual_res": {}, "u_inc": {}, "z_inc": {}}
 
     collected = {
         "primal_res": {},
         "dual_res": {},
         "u_inc": {},
+        "z_inc": {},
     }
 
     for file_path in norm_files:
@@ -623,6 +624,9 @@ def collect_norms_across_methods(root_dir: Path, batch: int = 0):
         collected["dual_res"][method_label] = data["dual_res"]
         collected["u_inc"][method_label] = data["u_inc"]
 
+        if "z_inc" in data:
+            collected["z_inc"][method_label] = data["z_inc"]
+
     return collected
 
 
@@ -632,7 +636,7 @@ def plot_convergence_two_datasets_shared_legend(
     batch: int = 0,
     save_path: Path = None,
     logy: bool = True,
-    metrics=("primal_res", "dual_res"),
+    metrics=("primal_res", "z_inc"),
 ):
     plt.rcParams.update({
         "font.size": 15,
@@ -646,12 +650,16 @@ def plot_convergence_two_datasets_shared_legend(
 
     all_norm_config = {
         "primal_res": (
-            "Residual",
+            "Primal Residual",
             r"$\|x^k - z^k\|_2$",
         ),
         "dual_res": (
             "Dual Residual",
             r"$\rho\|z^k - z^{k-1}\|_2$",
+        ),
+        "z_inc": (
+            "Dual Residual (unscaled)",
+            r"$\|z^k - z^{k-1}\|_2$",
         ),
     }
     norm_config = {key: all_norm_config[key] for key in metrics}
@@ -672,7 +680,7 @@ def plot_convergence_two_datasets_shared_legend(
     fig, axes = plt.subplots(
         n_rows,
         n_cols,
-        figsize=(8.5 * n_cols, 7.5 * n_rows),
+        figsize=(8.5 * n_cols, 5.5 * n_rows),
         sharex=False,
         squeeze=False,
     )
@@ -719,7 +727,6 @@ def plot_convergence_two_datasets_shared_legend(
         all_handles.values(),
         all_handles.keys(),
         loc="lower center",
-        bbox_to_anchor=(0.5, -0.035),
         ncol=3,
         frameon=False,
     )
