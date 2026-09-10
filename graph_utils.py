@@ -988,6 +988,7 @@ def _read_metric_convergence(path, filename: str) -> pd.DataFrame:
 def plot_fbs_vs_admm_psnr_convergence(
     runs,
     metric: str = "psnr",
+    metrics=None,
     save_name: str = None,
 ):
     """
@@ -996,6 +997,13 @@ def plot_fbs_vs_admm_psnr_convergence(
     subplot per entry in `runs`.
 
     `metric` is one of "psnr", "ssim", "lpips".
+
+    `metrics`, if given (e.g. ["psnr", "ssim", "lpips"]), overrides `metric`
+    and instead stacks one row per metric on top of each other (columns
+    stay one per `runs` entry), sharing the x-axis within each column (only
+    the bottom row shows "Iteration" and its tick labels), and the run
+    title is shown once per column, on the top row only (the metric name
+    is conveyed by the y-axis label instead of the title).
 
     `runs` is a list of dicts, each with:
       - "title": subplot title (e.g. "CELEBA — Box Inpainting")
@@ -1019,22 +1027,30 @@ def plot_fbs_vs_admm_psnr_convergence(
             }],
             metric="ssim",
         )
-    """
-    if metric not in CONVERGENCE_METRIC_INFO:
-        raise ValueError(f"Unknown metric '{metric}'. Choose from {list(CONVERGENCE_METRIC_INFO)}.")
 
-    filename, ylabel = CONVERGENCE_METRIC_INFO[metric]
+        # Stacked PSNR / SSIM / LPIPS rows, legend inside each subplot:
+        gu.plot_fbs_vs_admm_psnr_convergence(
+            runs=[...],
+            metrics=["psnr", "ssim", "lpips"],
+        )
+    """
+    stacked = metrics is not None
+    metrics_to_plot = metrics if stacked else [metric]
+
+    for m in metrics_to_plot:
+        if m not in CONVERGENCE_METRIC_INFO:
+            raise ValueError(f"Unknown metric '{m}'. Choose from {list(CONVERGENCE_METRIC_INFO)}.")
 
     if save_name is None:
-        save_name = f"fbs_vs_admm_{metric}_convergence.png"
+        save_name = f"fbs_vs_admm_{'_'.join(metrics_to_plot)}_convergence.png"
 
     plt.rcParams.update({
-        "font.size": 16,
-        "axes.titlesize": 20,
-        "axes.labelsize": 20,
-        "xtick.labelsize": 18,
-        "ytick.labelsize": 18,
-        "legend.fontsize": 18,
+        "font.size": 22,
+        "axes.titlesize": 22,
+        "axes.labelsize": 22,
+        "xtick.labelsize": 22,
+        "ytick.labelsize": 22,
+        "legend.fontsize": 22,
         "figure.titlesize": 22,
     })
 
@@ -1043,14 +1059,23 @@ def plot_fbs_vs_admm_psnr_convergence(
         "with dual": dict(color="tab:green", marker="^"),
     }
 
+    # Stacked: one row per metric, one column per run, sharing the x-axis
+    # within each column.
+    n_rows = len(metrics_to_plot) if stacked else 1
     n_cols = len(runs)
-    fig, axes = plt.subplots(1, n_cols, figsize=(9.5 * n_cols, 5.5), squeeze=False)
-    axes = axes[0]
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(9 * n_cols, 5.5 * n_rows),
+        sharex="col" if stacked else False,
+        squeeze=False,
+    )
 
     plotted_any = False
 
-    for col_idx, run in enumerate(runs):
-        ax = axes[col_idx]
+    def draw(ax, run, m):
+        nonlocal plotted_any
+        filename, ylabel = CONVERGENCE_METRIC_INFO[m]
 
         fbs_df = _read_metric_convergence(run["fbs_dir"], filename)
         admm_df = _read_metric_convergence(run["admm_dir"], filename)
@@ -1069,13 +1094,34 @@ def plot_fbs_vs_admm_psnr_convergence(
             )
             plotted_any = True
 
-        ax.set_xlabel("Iteration")
         ax.set_ylabel(ylabel)
-        ax.set_title(f"{run.get('title', '')} — {metric.upper()}", pad=12)
         ax.grid(True, alpha=0.3)
         ax.tick_params(axis="both")
-        legend_loc = "upper right" if metric == "lpips" else "lower right"
+
+        legend_loc = "upper right" if m == "lpips" else "lower right"
         ax.legend(loc=legend_loc, frameon=True)
+
+    if stacked:
+        # Row per metric, column per run — title once per column, top row
+        # only (metric name is already conveyed by the y-axis label); x-axis
+        # shared and only labeled on the bottom row of each column.
+        for row_idx, m in enumerate(metrics_to_plot):
+            for col_idx, run in enumerate(runs):
+                ax = axes[row_idx][col_idx]
+                draw(ax, run, m)
+                if row_idx == 0:
+                    ax.set_title(run.get("title", ""), pad=12)
+                if row_idx == n_rows - 1:
+                    ax.set_xlabel("Iteration")
+                else:
+                    plt.setp(ax.get_xticklabels(), visible=False)
+    else:
+        # Single row, one subplot per run, for the one requested metric.
+        for col_idx, run in enumerate(runs):
+            ax = axes[0][col_idx]
+            draw(ax, run, metric)
+            ax.set_xlabel("Iteration")
+            ax.set_title(f"{run.get('title', '')} — {metric.upper()}", pad=12)
 
     if not plotted_any:
         print("[WARNING] Nothing was plotted")
@@ -1085,7 +1131,7 @@ def plot_fbs_vs_admm_psnr_convergence(
     plt.tight_layout()
 
     out_path = Path(save_name)
-    plt.savefig(out_path, dpi=300, bbox_inches="tight")
+    # plt.savefig(out_path, dpi=300, bbox_inches="tight")
     plt.show()
 
     print(f"Saved: {out_path}")
