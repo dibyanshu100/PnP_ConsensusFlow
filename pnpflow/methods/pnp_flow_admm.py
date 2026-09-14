@@ -542,14 +542,13 @@ class PNP_FLOW_ADMM(object):
                         z = self.denoiser(z_tilde, t).clamp(*clamp_normalized)
                         gauss_noise_det = (z_tilde - z * t_view) / ((1.0 - t_view) + 1e-12)
                         gauss_noise_rand = torch.randn_like(x)
-                        # det_weight = t_view
-                        # rand_weight = 1.0 - det_weight
-
-                        det_weight_start = 0.6
-                        det_weight_end = 0.8
-
-                        det_weight = det_weight_start + (det_weight_end - det_weight_start) * t_view
+                        det_weight = t_view
                         rand_weight = 1.0 - det_weight
+
+                        # det_weight_start = 0.6
+                        # det_weight_end = 0.8
+                        # det_weight = det_weight_start + (det_weight_end - det_weight_start) * t_view
+                        # rand_weight = 1.0 - det_weight
 
                         # Variance-normalized
                         gauss_noise = (rand_weight * gauss_noise_rand + det_weight * gauss_noise_det) / torch.sqrt(
