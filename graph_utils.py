@@ -967,7 +967,23 @@ def _resolve_average_file(path, filename: str) -> Path:
     path = Path(path)
     if path.suffix == ".txt":
         return path
-    return path / filename
+
+    direct = path / filename
+    if direct.exists():
+        return direct
+
+    # Not the exact leaf hyperparameter directory -- search under it so a
+    # short path (e.g. ".../pnp_flow_fbs") works without spelling out every
+    # steps_pnp=.../alpha=... subfolder.
+    matches = sorted(path.rglob(filename))
+    if not matches:
+        return direct
+    if len(matches) > 1:
+        print(
+            f"[WARNING] Multiple {filename} found under {path}, using {matches[0]}. "
+            f"Pass a more specific directory to disambiguate. All matches: {matches}"
+        )
+    return matches[0]
 
 
 def _read_metric_convergence(path, filename: str) -> pd.DataFrame:
@@ -1008,22 +1024,22 @@ def plot_fbs_vs_admm_psnr_convergence(
     `runs` is a list of dicts, each with:
       - "title": subplot title (e.g. "CELEBA — Box Inpainting")
       - "fbs_dir": PnP-FBS run's leaf hyperparameter directory, OR the full
-                    path to its <metric>_rec_average.txt
+                    path to its <metric>_rec_average.txt, OR any ancestor
+                    directory (e.g. ".../pnp_flow_fbs") -- if the exact leaf
+                    isn't found, the file is located by searching under
+                    that directory, so you don't have to spell out the
+                    steps_pnp=.../alpha=... chain for every task. Only use
+                    the short form when exactly one hyperparameter sweep's
+                    results live under it; with more than one it just picks
+                    the first match and prints a [WARNING].
       - "admm_dir": same, for the PnP-ADMM run
 
     Example:
         gu.plot_fbs_vs_admm_psnr_convergence(
             runs=[{
                 "title": "CELEBA — Box Inpainting (steps=100)",
-                "fbs_dir": Path("results/celeba/ot/inpainting/pnp_flow_fbs/test/"
-                                 "steps_pnp=100/lr_pnp=1.0/gamma_style=alpha_1_minus_t/"
-                                 "num_samples=5/alpha=0.5/adaptive_noise=True"),
-                "admm_dir": Path("results/celeba/ot/inpainting/pnp_flow_admm/test/"
-                                  "steps_pnp=100/rho_admm=50/max_cgiter=10/cg_tol=1e-05/"
-                                  "save_norms_admm=False/adaptive_noise=True/"
-                                  "deterministic_noise=False/t_schedule_gamma=1.0/"
-                                  "admm_gd_steps=10/beta_rho=2.5/early_stopping=False/"
-                                  "num_denoiser_calls=5"),
+                "fbs_dir": Path("results/celeba/ot/inpainting/pnp_flow_fbs"),
+                "admm_dir": Path("results/celeba/ot/inpainting/pnp_flow_admm"),
             }],
             metric="ssim",
         )
