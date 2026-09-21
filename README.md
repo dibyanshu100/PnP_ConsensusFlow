@@ -1,8 +1,8 @@
 ![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)
 
-# Plug-and-Play ADMM for Inverse Problems with Flow Matching Denoiser
+# PnP-CF: A Consensus Flow-Matching Solver for General Inverse Problems
 
-This repository contains the implementation of **PnP-Flow-ADMM**, a flow-guided PnP-ADMM (Alternating Direction Method of Multipliers) method with trajectory correction that keeps iterates aligned with the generative prior, improving reconstruction quality and efficiency in inverse problems.
+This repository contains the implementation of **PnP-CF**, a flow-matching plug-and-play solver that combines ADMM-like consensus updates with a time-adaptive stochastic–deterministic pullback, enabling strong reconstruction performance across both linear and nonlinear inverse problems.
 
 Our implementation is adapted from the PnP-Flow (ICLR 2025) codebase, which is based on a Forward-Backward Splitting (FBS) formulation.
 
@@ -10,17 +10,14 @@ Our implementation is adapted from the PnP-Flow (ICLR 2025) codebase, which is b
 
 ## Overview
 
-Inverse problems aim to recover signals from degraded measurements and are typically ill-posed.
-Plug-and-Play (PnP) methods address this by integrating pretrained generative priors, with recent work leveraging efficient flow matching models.
-However, existing PnP approaches can push iterates away from the learned flow trajectories, reducing the effectiveness of the prior.
+Inverse problems aim to recover signals from degraded measurements and are typically ill-posed. Plug-and-Play (PnP) methods address this by integrating pretrained generative priors, with recent work leveraging efficient continuous-time generative models such as flow matching. However, the reconstruction quality depends critically on the interplay and consensus between the inverse-problem solver and the generative sampler.
 
-We propose **PnP-Flow-ADMM**, a framework that improves the integration of flow priors within PnP methods.
+We propose **PnP-CF (Consensus Flow)**, a flow-matching PnP framework designed to improve this interaction and maintain consistency with the learned flow trajectory.
 
 **Our contributions include:**
-
-* **ADMM-based optimization with flow priors** for better data–prior consistency
-* **Trajectory correction mechanism** to keep iterates aligned with flow dynamics
-* **Improved efficiency** with fewer denoiser evaluations and lower runtime
+* **ADMM-like dual-variable updates** to promote consensus between the data-consistency and generative-prior steps
+* **Time-adaptive trajectory pullback** onto intermediate flow states using complementary stochastic and deterministic components
+* **Support for both linear and nonlinear inverse problems**, including forward operators implemented by pretrained neural networks
 
 <p align="center">
   <img src="al_comparisons_paper.png" width="800"/>
@@ -62,8 +59,11 @@ Available options:
 ```bash
 celeba-dataset
 afhq-cat-dataset
+celebahq-dataset
 pretrained-network-celeba
 pretrained-network-afhq-cat
+pretrained-network-celebahq
+deblur_model
 ```
 
 ---
