@@ -298,11 +298,11 @@ def extract_basic_metrics(root_dir: Path, out_xlsx: str = "metrics_summary.xlsx"
                 deterministic = to_bool(r.get("deterministic_noise", False))
 
                 if adaptive:
-                    method_name = "ADMM adaptive"
+                    method_name = "PnP-CF adaptive"
                 elif deterministic:
-                    method_name = "ADMM deterministic"
+                    method_name = "PnP-CF deterministic"
                 else:
-                    method_name = "ADMM stochastic"
+                    method_name = "PnP-CF stochastic"
 
                 row = {"task": task, "method": method_name}
                 row.update({col: r[col] for col in cols_to_keep if col in df.columns})
@@ -782,11 +782,11 @@ def extract_time_memory_summary(root_dir: Path) -> pd.DataFrame:
         if method == "pnp_cf":
             path = str(exp_dir).lower()
             if "adaptive_noise=true" in path:
-                method = "ADMM adaptive"
+                method = "PnP-CF adaptive"
             elif "adaptive_noise=false" in path and "deterministic_noise=true" in path:
-                method = "ADMM deterministic"
+                method = "PnP-CF deterministic"
             elif "adaptive_noise=false" in path and "deterministic_noise=false" in path:
-                method = "ADMM stochastic"
+                method = "PnP-CF stochastic"
 
         time_avg = read_average_value(time_file)
         memory_avg = read_average_value(mem_file)
@@ -845,7 +845,7 @@ def plot_fbs_vs_admm_psnr_vs_steps(
     For each task, plot `metric` vs steps_pnp for three series:
       - PnP-FBS with adaptive_noise=True
       - PnP-FBS with adaptive_noise=False
-      - PnP-ADMM (ours)
+      - PnP-CF (ours)
 
     `metric` is one of "psnr", "ssim", "lpips" and determines which
     final_<metric>.txt file is read from base_dir/<task>/pnp_flow_fbs/test
@@ -874,7 +874,7 @@ def plot_fbs_vs_admm_psnr_vs_steps(
     series_style = {
         "PnP-FBS (adaptive)": dict(color="tab:blue", marker="o"),
         "PnP-FBS (non-adaptive)": dict(color="tab:orange", marker="s"),
-        "PnP-ADMM (ours)": dict(color="tab:green", marker="^"),
+        "PnP-CF (ours)": dict(color="tab:green", marker="^"),
     }
 
     n_cols = len(tasks)
@@ -909,7 +909,7 @@ def plot_fbs_vs_admm_psnr_vs_steps(
                 plotted_any = True
 
         if admm_df is not None and not admm_df.empty:
-            label = "PnP-ADMM (ours)"
+            label = "PnP-CF (ours)"
             style = series_style[label]
             line, = ax.plot(
                 admm_df["steps_pnp"],
@@ -952,7 +952,7 @@ def plot_fbs_vs_admm_psnr_vs_steps(
 
 
 #############################################################################################################################
-# PnP-FBS vs PnP-ADMM: per-iteration metric convergence
+# PnP-FBS vs PnP-CF: per-iteration metric convergence
 
 CONVERGENCE_METRIC_INFO = {
     "psnr": ("psnr_rec_average.txt", "PSNR"),

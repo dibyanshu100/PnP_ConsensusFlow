@@ -3,7 +3,7 @@ set -euo pipefail
 
 DATASET_ARGS="dataset celebahq dim_image 128 problem segmentation model ot \
 train False eval True eval_split test noise_type gaussian \
-batch_size_ip 4 max_batch 25 start_batch 0 save_results True"
+batch_size_ip 4 max_batch 5 start_batch 0 save_results True"
 
 
 run_method () {
@@ -15,8 +15,6 @@ run_method () {
     echo "Running method: ${method}"
     echo "=============================================="
 
-    # Run reconstruction/evaluation.
-    # Explicitly catch failure so this method stops, but the whole script doesn't.
     if ! python main.py \
         --opts ${DATASET_ARGS} \
         method "${method}" \
@@ -26,8 +24,6 @@ run_method () {
         return 1
     fi
 
-    # Find the reconstruction directory.
-    # -print -quit avoids the find | head issue with pipefail.
     local recon_dir
     recon_dir=$(
         find "results/celebahq/ot/segmentation/${method}/test" \
@@ -59,7 +55,6 @@ run_method () {
 
     echo "Found ${num_recon} reconstructed images for ${method}."
 
-    # Compute FID/KID/LPIPS.
     if ! python scripts/segmentation_fid_kid.py \
         --recon_dir "${recon_dir}" \
         --real_data_dir data/celebahq/test \
