@@ -87,38 +87,17 @@ def compute_paired_lpips(recon_dir, real_dir, dim_image, net='alex',
 def main():
     parser = argparse.ArgumentParser(
         description='Compute FID/KID/LPIPS for segmentation-task reconstructions.')
-    parser.add_argument(
-        '--recon_dir', type=str, required=True,
-        help="Directory of reconstructed test images, e.g. "
-             "'<save_path_ip>/fid_kid_images/recon' (produced by "
-             "utils.save_recon_for_fid during solve_ip_segmentation).")
-    parser.add_argument(
-        '--real_data_dir', type=str, default='data/celebahq/test',
-        help='Directory containing the full CelebAMask-HQ image set '
-             '(train + test), used as the FID/KID real/reference distribution.')
-    parser.add_argument(
-        '--real_ids_file', type=str, default=None,
-        help='Optional id-list file to restrict the FID/KID real reference '
-             'set (e.g. only test_ids.txt). Default: use every image in '
-             'real_data_dir (train + test), per FID/KID best practice.')
-    parser.add_argument(
-        '--paired_real_dir', type=str, default=None,
-        help="Directory of ground-truth images paired 1:1 with recon_dir "
-             "for LPIPS. Default: '<recon_dir>/../real' (the sibling "
-             "folder utils.save_recon_for_fid writes automatically).")
+    parser.add_argument('--recon_dir', type=str, required=True)
+    parser.add_argument('--real_data_dir', type=str, default='data/celebahq/test')
+    parser.add_argument('--real_ids_file', type=str, default=None)
+    parser.add_argument('--paired_real_dir', type=str, default=None)
     parser.add_argument('--dim_image', type=int, default=128)
     parser.add_argument('--batch_size', type=int, default=50)
-    parser.add_argument('--subset_size', type=int, default=1000,
-                         help='KID subset size (capped to the smaller of '
-                              'the two sample counts if needed).')
+    parser.add_argument('--subset_size', type=int, default=1000)
     parser.add_argument('--num_subsets', type=int, default=100)
-    parser.add_argument('--lpips_net', type=str, default='alex',
-                         choices=['alex', 'vgg', 'squeeze'])
-    parser.add_argument('--skip_lpips', action='store_true',
-                         help='Skip LPIPS and only compute FID/KID.')
-    parser.add_argument('--output', type=str, default=None,
-                         help='Where to write the results. Defaults to '
-                              '<recon_dir>/../fid_kid.txt')
+    parser.add_argument('--lpips_net', type=str, default='alex', choices=['alex', 'vgg', 'squeeze'])
+    parser.add_argument('--skip_lpips', action='store_true')
+    parser.add_argument('--output', type=str, default=None)
     args = parser.parse_args()
 
     if args.output is None:
