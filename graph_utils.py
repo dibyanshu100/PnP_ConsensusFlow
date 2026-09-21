@@ -807,8 +807,6 @@ def extract_time_memory_summary(root_dir: Path) -> pd.DataFrame:
 
 
 #############################################################################################################################
-# PnP-FBS (adaptive vs non-adaptive) vs PnP-ADMM: PSNR vs number of steps
-
 def _read_psnr_vs_steps(file_path: Path, y_col: str = "psnr_rec") -> pd.DataFrame:
     if not file_path.exists():
         print(f"[WARNING] File not found: {file_path}")
@@ -954,7 +952,7 @@ def plot_fbs_vs_admm_psnr_vs_steps(
 
 
 #############################################################################################################################
-# PnP-FBS vs PnP-ADMM: per-iteration metric convergence (from <metric>_rec_average.txt)
+# PnP-FBS vs PnP-ADMM: per-iteration metric convergence
 
 CONVERGENCE_METRIC_INFO = {
     "psnr": ("psnr_rec_average.txt", "PSNR"),
@@ -972,9 +970,6 @@ def _resolve_average_file(path, filename: str) -> Path:
     if direct.exists():
         return direct
 
-    # Not the exact leaf hyperparameter directory -- search under it so a
-    # short path (e.g. ".../pnp_flow_fbs") works without spelling out every
-    # steps_pnp=.../alpha=... subfolder.
     matches = sorted(path.rglob(filename))
     if not matches:
         return direct
@@ -1007,49 +1002,7 @@ def plot_fbs_vs_admm_psnr_convergence(
     metrics=None,
     save_name: str = None,
 ):
-    """
-    Plot the per-iteration metric convergence curve (from
-    <metric>_rec_average.txt) for a PnP-FBS run against a PnP-ADMM run, one
-    subplot per entry in `runs`.
 
-    `metric` is one of "psnr", "ssim", "lpips".
-
-    `metrics`, if given (e.g. ["psnr", "ssim", "lpips"]), overrides `metric`
-    and instead stacks one row per metric on top of each other (columns
-    stay one per `runs` entry), sharing the x-axis within each column (only
-    the bottom row shows "Iteration" and its tick labels), and the run
-    title is shown once per column, on the top row only (the metric name
-    is conveyed by the y-axis label instead of the title).
-
-    `runs` is a list of dicts, each with:
-      - "title": subplot title (e.g. "CELEBA — Box Inpainting")
-      - "fbs_dir": PnP-FBS run's leaf hyperparameter directory, OR the full
-                    path to its <metric>_rec_average.txt, OR any ancestor
-                    directory (e.g. ".../pnp_flow_fbs") -- if the exact leaf
-                    isn't found, the file is located by searching under
-                    that directory, so you don't have to spell out the
-                    steps_pnp=.../alpha=... chain for every task. Only use
-                    the short form when exactly one hyperparameter sweep's
-                    results live under it; with more than one it just picks
-                    the first match and prints a [WARNING].
-      - "admm_dir": same, for the PnP-ADMM run
-
-    Example:
-        gu.plot_fbs_vs_admm_psnr_convergence(
-            runs=[{
-                "title": "CELEBA — Box Inpainting (steps=100)",
-                "fbs_dir": Path("results/celeba/ot/inpainting/pnp_flow_fbs"),
-                "admm_dir": Path("results/celeba/ot/inpainting/pnp_flow_admm"),
-            }],
-            metric="ssim",
-        )
-
-        # Stacked PSNR / SSIM / LPIPS rows, legend inside each subplot:
-        gu.plot_fbs_vs_admm_psnr_convergence(
-            runs=[...],
-            metrics=["psnr", "ssim", "lpips"],
-        )
-    """
     stacked = metrics is not None
     metrics_to_plot = metrics if stacked else [metric]
 
@@ -1075,8 +1028,6 @@ def plot_fbs_vs_admm_psnr_convergence(
         "with dual": dict(color="tab:green", marker="^"),
     }
 
-    # Stacked: one row per metric, one column per run, sharing the x-axis
-    # within each column.
     n_rows = len(metrics_to_plot) if stacked else 1
     n_cols = len(runs)
     fig, axes = plt.subplots(
@@ -1118,9 +1069,6 @@ def plot_fbs_vs_admm_psnr_convergence(
         ax.legend(loc=legend_loc, frameon=True)
 
     if stacked:
-        # Row per metric, column per run — title once per column, top row
-        # only (metric name is already conveyed by the y-axis label); x-axis
-        # shared and only labeled on the bottom row of each column.
         for row_idx, m in enumerate(metrics_to_plot):
             for col_idx, run in enumerate(runs):
                 ax = axes[row_idx][col_idx]
@@ -1132,7 +1080,6 @@ def plot_fbs_vs_admm_psnr_convergence(
                 else:
                     plt.setp(ax.get_xticklabels(), visible=False)
     else:
-        # Single row, one subplot per run, for the one requested metric.
         for col_idx, run in enumerate(runs):
             ax = axes[0][col_idx]
             draw(ax, run, metric)

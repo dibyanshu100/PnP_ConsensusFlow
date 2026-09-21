@@ -216,14 +216,11 @@ class NonlinearBlur(Degradation):
     def H(self, x):
         x = x.to(self.device)
         kernel = self.kernel.expand(x.shape[0], -1, -1, -1)
-        # KernelWizard was trained on images in [0, 1]; this codebase uses
-        # [-1, 1] (see pnpflow/dataloaders.py's Normalize(0.5, 0.5))
         x01 = (x + 1.0) / 2.0
         out01 = self.net.adaptKernel(x01, kernel=kernel)
         return (out01 * 2.0 - 1.0).clamp(-1, 1)
 
     def H_adj(self, x):
-        # Display/initialization stand-in only -- see class docstring.
         return x
 
 
@@ -243,7 +240,6 @@ class PhaseRetrieval(Degradation):
         return torch.abs(torch.fft.fft2(x_pad, norm='ortho'))
 
     def H_adj(self, y):
-        # Display/initialization stand-in only -- see class docstring.
         gen = torch.Generator(device=y.device).manual_seed(0)
         phase = torch.exp(1j * torch.rand(y.shape, device=y.device, generator=gen) * 2 * math.pi)
         x_pad = torch.real(torch.fft.ifft2(y.to(torch.complex64) * phase, norm='ortho'))
@@ -262,7 +258,6 @@ class HDRReconstruction(Degradation):
         return torch.clamp(self.scale * x, -1.0, 1.0)
 
     def H_adj(self, y):
-        # Display/initialization stand-in only -- see class docstring.
         return y / self.scale
 
 

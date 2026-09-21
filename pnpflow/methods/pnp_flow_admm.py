@@ -38,19 +38,6 @@ class PNP_FLOW_ADMM(object):
         return rho / (max(1.0 - t_val, 1e-3) ** beta)
 
     def admm_x_update(self, x_init, z, u, y, degradation, rho, sigma_noise, max_cgiter=50, cg_tol=1e-6):
-        """
-        For linear H, solves in closed form via CG:
-            (1/sigma^2 H^T H + rho I)x = 1/sigma^2 H^T y + rho (z-u)
-
-        For nonlinear H there is no such closed form, so instead we take a few
-        proximal-gradient steps on the (still convex-in-the-quadratic-part)
-        x-subproblem
-            1/(2 sigma^2) ||H(x)-y||^2 + rho/2 ||x-(z-u)||^2
-        using degradation.vjp for the data-fidelity gradient. The step size
-        1/rho is safe because the proximal term's curvature (rho) dominates
-        near the ADMM fixed point, where rho is typically large relative to
-        1/sigma^2.
-        """
         H = degradation.H
         sigma2_inv = 1.0 / (sigma_noise ** 2)
 
@@ -65,9 +52,6 @@ class PNP_FLOW_ADMM(object):
             x = self.conjugate_gradient(A, b, x_init, max_iter=max_cgiter, tol=cg_tol)
             return x
         else:
-            # Fixed-size steps are unsafe here: the data term's curvature
-            # scales with 1/sigma^2 (which can dwarf rho), so a step size
-            # that is safe for one (rho, sigma) pair can diverge for another.
             x = x_init.clone()
             target = z - u
 
@@ -205,10 +189,6 @@ class PNP_FLOW_ADMM(object):
 
             for restart in range(num_restarts):
                 if num_restarts > 1:
-                    # Only reseed in multi-restart mode: this keeps the
-                    # num_restarts=1 path's RNG sequence (and therefore its
-                    # numerical results) identical to before this feature
-                    # existed -- see this method's docstring note above.
                     torch.manual_seed(1000 * batch + restart)
                     print(f"  [restart {restart}/{num_restarts}]")
 
@@ -240,10 +220,6 @@ class PNP_FLOW_ADMM(object):
 
                         t_view = t1.view(-1, 1, 1, 1)
 
-                        # Optional t-dependent penalty parameter, analogous
-                        # to FBS's gamma_t = (1-t)^alpha schedule. See
-                        # rho_schedule() docstring. Defaults to plain
-                        # constant rho unless rho_schedule_style is set.
                         rho_t = self.rho_schedule(rho, t_val)
 
                         # Save previous values for diagnostics
@@ -402,9 +378,7 @@ class PNP_FLOW_ADMM(object):
         self, degradation, x_init, target_distribution, z, u, rho, lr,
         n_inner_steps=5, clamp_normalized=(-1.0, 1.0), ce_weight=15.0,
     ):
-        """CE + rho-penalty gradient descent x-update for segmentation's
-        cross-entropy data term (mirrors the proximal-gradient x-update
-        used for other nonlinear operators in admm_x_update)."""
+        
         x_current = x_init.detach().clone()
         target_distribution = target_distribution.detach()
         z, u = z.detach(), u.detach()
@@ -436,9 +410,6 @@ class PNP_FLOW_ADMM(object):
     @torch.no_grad()
     def _seg_make_neighbor_soft_target(self, target_mask, alpha, num_classes,
                                         neighbor_matrix):
-        """Blend the hard one-hot target with each class's neighbor
-        distribution (CLASS_NEIGHBORS), weighted by alpha
-        (0 = pure hard target, 1 = pure neighbor distribution)."""
         one_hot = torch.nn.functional.one_hot(target_mask, num_classes=num_classes)
         one_hot = one_hot.permute(0, 3, 1, 2).float().contiguous()
         if alpha <= 0.0:
@@ -453,12 +424,6 @@ class PNP_FLOW_ADMM(object):
         return float(noise_start * (1.0 - progress) ** 3)
 
     def solve_ip_segmentation(self, test_loader, degradation):
-        """Segmentation branch of the ADMM solver. Uses the exact same
-        rho / beta_rho (power) / t_schedule_gamma schedule as every other
-        task -- see rho_schedule(). The only segmentation-specific
-        hyperparameters left are the CE data-term weight and the x-update's
-        inner gradient-descent steps/learning rate.
-        """
         import torch.nn.functional as Fs
 
         a = self.args

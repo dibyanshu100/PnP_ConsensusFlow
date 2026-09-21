@@ -848,8 +848,6 @@ def compute_average_psnr(args):
 
             with open(filename, 'r') as f:
                 for line in f:
-                    # 'final' isn't a numeric ADMM iteration -- parse it as
-                    # its own bucket instead of crashing on float('final').
                     iter_str, psnr_str = line.strip().split()
                     psnr = float(psnr_str)
                     try:
@@ -865,9 +863,6 @@ def compute_average_psnr(args):
         )
 
         with open(avg_filename, 'a') as f:
-            # Sort numeric iterations first (ascending), non-numeric ones
-            # (e.g. 'final') last -- preserves the existing assumption a
-            # few lines below that psnr_values[-1] is the final result.
             for iteration, avg_psnr in sorted(
                     psnr_averages.items(), key=lambda kv: (isinstance(kv[0], str), kv[0])):
                 f.write(f'{iteration} {avg_psnr:.4f}\n')
@@ -961,7 +956,6 @@ def compute_average_lpips(args):
 
             with open(filename, 'r') as f:
                 for line in f:
-                    # See compute_average_psnr's identical fix.
                     iter_str, lpips_str = line.strip().split()
                     lpips = float(lpips_str)
                     try:
@@ -1014,9 +1008,6 @@ def compute_ssim(clean_img, noisy_img, rec_img, args, H_adj, iter='final'):
         H_adj(noisy_img), args).cpu()
     clean_img = postprocess(clean_img.clone(), args).cpu()
     if args.problem != 'segmentation':
-        # See compute_psnr's identical guard -- noisy_img is an int64
-        # label map here, postprocess() would crash on it, and it's
-        # discarded below in favor of H_adj_noisy_img regardless.
         noisy_img = postprocess(noisy_img.clone(), args).cpu()
     rec_img = postprocess(rec_img.clone(), args).cpu()
 
