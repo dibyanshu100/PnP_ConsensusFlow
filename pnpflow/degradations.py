@@ -142,10 +142,6 @@ class Superresolution(Degradation):
             return torch.real(torch.fft.ifft2(torch.fft.fft2(x_) * torch.conj(torch.fft.fft2(self.filter))))
 
 
-# Architecture hyperparameters for the "GOPRO wVAE" checkpoint, copied from
-# BKSE's own options/generate_blur/default.yml (the exact config DPS's
-# configs/nonlinear_deblur_config.yaml points at). Only used to build the
-# KernelWizard module; unrelated to anything in the rest of this codebase.
 _KERNEL_WIZARD_OPT = {
     "input_nc": 3,
     "nf": 64,
@@ -221,8 +217,7 @@ class NonlinearBlur(Degradation):
         x = x.to(self.device)
         kernel = self.kernel.expand(x.shape[0], -1, -1, -1)
         # KernelWizard was trained on images in [0, 1]; this codebase uses
-        # [-1, 1] (see pnpflow/dataloaders.py's Normalize(0.5, 0.5)), so
-        # convert in and out, matching DPS's own operator exactly.
+        # [-1, 1] (see pnpflow/dataloaders.py's Normalize(0.5, 0.5))
         x01 = (x + 1.0) / 2.0
         out01 = self.net.adaptKernel(x01, kernel=kernel)
         return (out01 * 2.0 - 1.0).clamp(-1, 1)

@@ -601,11 +601,6 @@ def _seg_boundary_mask(label_map):
 
 
 def _boundary_f1(target, pred, tolerance=2):
-    """BFScore (Csurka et al.) between two [H,W] integer label maps: the F1
-    of boundary pixels, where a boundary pixel counts as a match if it
-    lies within `tolerance` pixels (L2, via a distance transform) of a
-    boundary pixel in the other map. Robust to the small pixel-level
-    misalignments that penalize a naive exact-overlap boundary metric."""
     b_t = _seg_boundary_mask(target)
     b_p = _seg_boundary_mask(pred)
     if not b_t.any() and not b_p.any():
@@ -624,15 +619,6 @@ def _boundary_f1(target, pred, tolerance=2):
 
 
 def save_segmentation_masks(target_mask, pred_mask, args, batch_offset=0):
-    """Save a colorized (tab20-palette) version of the target/predicted
-    label maps for every image in the batch, index-aligned with
-    save_recon_for_fid's recon/real folders -- same palette save_images()
-    uses for its mask visualization.
-
-    -- target_mask : [B,H,W] int label map the solver was guided by.
-    -- pred_mask   : [B,H,W] int label map from re-segmenting the final
-       reconstruction (i.e. degradation.H(z).argmax(dim=1)).
-    """
     t = target_mask.detach().cpu().numpy().astype(np.uint8)
     p = pred_mask.detach().cpu().numpy().astype(np.uint8)
 
@@ -658,17 +644,6 @@ def save_segmentation_masks(target_mask, pred_mask, args, batch_offset=0):
 
 def save_boundary_comparison(real_img, recon_img, target_mask, pred_mask,
                               args, batch_offset=0, dilate=1):
-    """Save a [real_img + original-mask boundary] | [recon_img +
-    original-mask boundary] side-by-side PNG per image, boundary drawn in
-    red -- the *same* original/target mask boundary overlaid on both
-    photos, so misalignment between the reconstruction's content and the
-    mask it was guided by is directly visible (rather than comparing two
-    different masks, each drawn on its own photo).
-
-    Only meant as a qualitative spot-check (like save_images()'s per-image
-    PNGs), not a full-test-set dump -- callers should gate this to a
-    handful of batches.
-    """
     real_np = postprocess(real_img.clone(), args).detach().permute(0, 2, 3, 1).cpu().numpy()
     recon_np = postprocess(recon_img.clone(), args).detach().permute(0, 2, 3, 1).cpu().numpy()
     target_np = target_mask.detach().cpu().numpy()
@@ -696,11 +671,6 @@ def save_boundary_comparison(real_img, recon_img, target_mask, pred_mask,
 
 
 def compute_segmentation_scores(target_mask, pred_mask, args, iter='final'):
-    """mIoU, mean Dice, pixel accuracy, and boundary F1 between
-    target_mask and pred_mask (both [B,H,W] int label maps), computed
-    per-image then appended to per-batch text files -- same convention as
-    compute_psnr (one file per metric per batch, averaged later by
-    compute_average_segmentation_scores)."""
     num_classes = int(getattr(args, 'seg_num_classes', 19))
     t = target_mask.detach().cpu().numpy()
     p = pred_mask.detach().cpu().numpy()
@@ -734,9 +704,6 @@ def compute_segmentation_scores(target_mask, pred_mask, args, iter='final'):
 
 
 def compute_average_segmentation_scores(args):
-    """Averages mIoU/Dice/pixel-accuracy/boundary-F1 across all batches,
-    mirroring compute_average_psnr's file layout and NaN/'final'-safe
-    parsing."""
     dict_scores = {}
     for name in ['miou', 'dice', 'pixel_acc', 'boundary_f1']:
         by_iteration = defaultdict(list)
@@ -839,10 +806,6 @@ def compute_psnr(clean_img, noisy_img, rec_img, args, H_adj, iter='final'):
     # Ensure images are in the appropriate range and format for PSNR calculation
     clean_img = postprocess(clean_img.clone(), args)
     if args.problem != 'segmentation':
-        # noisy_img here is target_mask (int64 class labels) for
-        # segmentation -- postprocess()'s Normalize requires float and
-        # would crash on it, and this value is discarded below in favor of
-        # H_adj_noisy_img anyway (H_adj ignores dtype, only uses shape).
         noisy_img = postprocess(noisy_img.clone(), args)
     rec_img = postprocess(rec_img.clone(), args)
     H_adj_noisy_img = postprocess(H_adj(noisy_img), args)
@@ -1181,7 +1144,6 @@ def compute_average_memory(args):
 
 
 class MaskGenerator():
-    # copied from https://www.kaggle.com/code/tom99763/inpainting-mask-generator
     def __init__(self, height, width, channels=3, rand_seed=None, filepath=None):
         self.height = height
         self.width = width

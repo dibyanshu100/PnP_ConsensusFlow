@@ -1,16 +1,3 @@
-"""Calculates the Frechet Inception Distance (FID) to evalulate GANs
-
-The FID metric calculates the distance between two distributions of images.
-Typically, we have summary statistics (mean & covariance matrix) of one
-of these distributions, while the 2nd distribution is given by a GAN.
-
-The FID is calculated by assuming that X_1 and X_2 are the activations of
-the pool_3 layer of the inception net for generated samples and real world
-samples respectively.
-
-Code apapted from https://github.com/mseitzer/pytorch-fid
-"""
-
 import numpy as np
 import torch
 from scipy import linalg
@@ -19,24 +6,6 @@ from pnpflow.models import InceptionV3
 
 
 def get_activations(images, model, batch_size=50, dims=2048, device='cpu'):
-    """Calculates the activations of the pool_3 layer for all images.
-
-    Params:
-    -- images      : Images
-    -- model       : Instance of inception model
-    -- batch_size  : Batch size of images for the model to process at once.
-                     Make sure that the number of samples is a multiple of
-                     the batch size, otherwise some samples are ignored. This
-                     behavior is retained to match the original FID score
-                     implementation.
-    -- dims        : Dimensionality of features returned by Inception
-    -- device      : Device to run calculations
-
-    Returns:
-    -- A numpy array of dimension (num images, dims) that contains the
-       activations of the given tensor when feeding inception with the
-       query tensor.
-    """
     model.eval()
 
     if batch_size > len(images):
@@ -72,27 +41,6 @@ def get_activations(images, model, batch_size=50, dims=2048, device='cpu'):
 
 
 def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
-    """Numpy implementation of the Frechet Distance.
-    The Frechet distance between two multivariate Gaussians X_1 ~ N(mu_1, C_1)
-    and X_2 ~ N(mu_2, C_2) is
-            d^2 = ||mu_1 - mu_2||^2 + Tr(C_1 + C_2 - 2*sqrt(C_1*C_2)).
-
-    Stable version by Dougal J. Sutherland.
-
-    Params:
-    -- mu1   : Numpy array containing the activations of a layer of the
-               inception net (like returned by the function 'get_predictions')
-               for generated samples.
-    -- mu2   : The sample mean over activations, precalculated on an
-               representative data set.
-    -- sigma1: The covariance matrix over activations for generated samples.
-    -- sigma2: The covariance matrix over activations, precalculated on an
-               representative data set.
-
-    Returns:
-    --   : The Frechet Distance.
-    """
-
     mu1 = np.atleast_1d(mu1)
     mu2 = np.atleast_1d(mu2)
 
@@ -134,22 +82,6 @@ def calculate_activation_statistics(
         batch_size=50,
         dims=2048,
         device='cpu'):
-    """Calculation of the statistics used by the FID.
-    Params:
-    -- images      : Images
-    -- model       : Instance of inception model
-    -- batch_size  : The images numpy array is split into batches with
-                     batch size batch_size. A reasonable batch size
-                     depends on the hardware.
-    -- dims        : Dimensionality of features returned by Inception
-    -- device      : Device to run calculations
-
-    Returns:
-    -- mu    : The mean over samples of the activations of the pool_3 layer of
-               the inception model.
-    -- sigma : The covariance matrix of the activations of the pool_3 layer of
-               the inception model.
-    """
     act = get_activations(images, model, batch_size, dims, device)
     mu = np.mean(act, axis=0)
     sigma = np.cov(act, rowvar=False)
@@ -157,17 +89,12 @@ def calculate_activation_statistics(
 
 
 def _polynomial_kernel(X, Y, degree=3, gamma=None, coef0=1.0):
-    """(gamma * X @ Y^T + coef0) ** degree -- the kernel used by the
-    standard KID estimator (Binkowski et al., 2018)."""
     if gamma is None:
         gamma = 1.0 / X.shape[1]
     return (gamma * X.dot(Y.T) + coef0) ** degree
 
 
 def _mmd2_unbiased(K_XX, K_YY, K_XY):
-    """Unbiased estimator of the squared Maximum Mean Discrepancy from
-    precomputed kernel (Gram) matrices, excluding the diagonal terms of
-    K_XX/K_YY as is standard for the unbiased estimator."""
     m = K_XX.shape[0]
     n = K_YY.shape[0]
 
@@ -180,24 +107,6 @@ def _mmd2_unbiased(K_XX, K_YY, K_XY):
 
 def calculate_kid(act1, act2, subset_size=1000, num_subsets=100, degree=3,
                    gamma=None, coef0=1.0, seed=0):
-    """Kernel Inception Distance (Binkowski et al., 2018), computed on
-    precomputed Inception activations. Unlike FID, KID makes no Gaussian
-    assumption on the activations and is estimated by repeatedly
-    subsampling both activation sets and averaging the unbiased
-    polynomial-kernel MMD^2 over the subsets.
-
-    Params:
-    -- act1/act2   : (N, dims) arrays of Inception activations for the two
-                     distributions being compared (order doesn't matter).
-    -- subset_size : Size of each random subset. Capped to the smaller of
-                     len(act1), len(act2) if either has fewer samples.
-    -- num_subsets : Number of subsets to average over.
-    -- degree, gamma, coef0 : Polynomial kernel hyperparameters.
-
-    Returns:
-    -- kid_mean, kid_std : Mean and standard deviation of the per-subset
-       unbiased MMD^2 estimates.
-    """
     rng = np.random.RandomState(seed)
     n = min(len(act1), len(act2), subset_size)
     if n < 2:
@@ -223,18 +132,6 @@ def calculate_kid(act1, act2, subset_size=1000, num_subsets=100, degree=3,
 
 def evaluate_fid_kid(images1, images2, batch_size=50, subset_size=1000,
                       num_subsets=100):
-    """Calculation of both FID and KID from two sets of images, reusing a
-    single pass of Inception activations for both metrics.
-
-    Params:
-    -- images1/2   : Images of shape (N, H, W, C), values in [0, 1].
-    -- batch_size  : Batch size for the Inception forward passes.
-    -- subset_size, num_subsets : See calculate_kid.
-
-    Returns:
-    -- fid_value           : The FID score.
-    -- (kid_mean, kid_std) : The KID score (mean and std over subsets).
-    """
     device = torch.device('cuda' if (torch.cuda.is_available()) else 'cpu')
 
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
@@ -268,17 +165,6 @@ def evaluate_fid_kid(images1, images2, batch_size=50, subset_size=1000,
 
 
 def evaluate_fid_score(images1, images2, batch_size=50):
-    """Calculation of FID.
-    Params:
-    -- images1/2   : Images of shape (N, H, W, C)
-    -- batch_size  : The images numpy array is split into batches with
-                     batch size batch_size. A reasonable batch size
-                     depends on the hardware.
-
-    Returns:
-    -- fid_value   : The FID score.
-    """
-
     device = torch.device('cuda' if (torch.cuda.is_available()) else 'cpu')
 
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
