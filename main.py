@@ -22,7 +22,7 @@ from pnpflow.dataloaders import DataLoaders
 from pnpflow.train_flow_matching import FLOW_MATCHING
 from pnpflow.train_denoiser import GRADIENT_STEP_DENOISER
 from pnpflow.compute_metric import ComputeMetric
-from pnpflow.methods.pnp_flow_admm import PNP_FLOW_ADMM
+from pnpflow.methods.pnp_cf import PNP_CF
 from pnpflow.methods.pnp_flow_fbs import PNP_FLOW_FBS
 from pnpflow.methods.d_flow import D_FLOW
 from pnpflow.methods.ot_ode import OT_ODE
@@ -294,8 +294,8 @@ def main():
         except FileExistsError:
             pass
         
-        if args.method == 'pnp_flow_admm':
-            method = PNP_FLOW_ADMM(model, device, args)
+        if args.method == 'pnp_cf':
+            method = PNP_CF(model, device, args)
         elif args.method == 'pnp_flow_fbs':
             method = PNP_FLOW_FBS(model, device, args)
         elif args.method == 'd_flow':
@@ -316,21 +316,17 @@ def main():
             raise ValueError(
                 f"Method '{args.method}' is only implemented for linear forward "
                 f"operators and cannot be run on problem '{args.problem}'. "
-                f"Use pnp_flow_admm, pnp_flow_fbs,d_flow or flow_dps instead.")
+                f"Use pnp_cf, pnp_flow_fbs,d_flow or flow_dps instead.")
 
         if getattr(degradation, 'is_segmentation', False) and args.method not in (
-                'pnp_flow_admm', 'pnp_flow_fbs', 'd_flow', 'flow_dps'):
-            # Segmentation's cross-entropy data term needed dedicated code
-            # paths (PNP_FLOW_ADMM.solve_ip_segmentation, and CE branches in
-            # grad_datafit/the D-Flow closure/FLOW_DPS.grad_datafit);
-            # OT-ODE/Flow-Priors were not extended to it.
+                'pnp_cf', 'pnp_flow_fbs', 'd_flow', 'flow_dps'):
             raise ValueError(
                 "Segmentation is currently only implemented for methods "
-                "'pnp_flow_admm', 'pnp_flow_fbs', 'd_flow', and 'flow_dps'.")
+                "'pnp_cf', 'pnp_flow_fbs', 'd_flow', and 'flow_dps'.")
 
         method.run_method(data_loaders, degradation, sigma_noise)
 
-# python main.py --opts dataset afhq_cat train False eval True problem denoising start_batch 4 method pnp_flow_admm
-# python main.py --opts dataset afhq_cat train False eval True problem hdr_reconstruction start_batch 4 method pnp_flow_admm
+# python main.py --opts dataset afhq_cat train False eval True problem denoising start_batch 4 method pnp_cf
+# python main.py --opts dataset afhq_cat train False eval True problem hdr_reconstruction start_batch 4 method pnp_cf
 if __name__ == "__main__":
     main()

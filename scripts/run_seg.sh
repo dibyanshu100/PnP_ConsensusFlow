@@ -93,9 +93,9 @@ safe_run () {
 }
 
 
-# ---- pnp_flow_admm ----------------------------------------------------
+# ---- pnp_cf ----------------------------------------------------
 
-safe_run pnp_flow_admm \
+safe_run pnp_cf \
     steps_pnp 500 \
     rho_admm 500 \
     beta_rho 0.0 \

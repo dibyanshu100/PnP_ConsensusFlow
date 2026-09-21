@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from pnpflow.nonlinear_ops.segmentation_task.seg_helpers import CLASS_NEIGHBORS
 
 
-class PNP_FLOW_ADMM(object):
+class PNP_CF(object):
 
     def __init__(self, model, device, args):
         self.device = device

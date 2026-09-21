@@ -17,7 +17,7 @@ BATCH_SIZE_IP="${BATCH_SIZE_IP:-10}"
 SEED="${SEED:-42}"
 EVAL_SPLIT="${EVAL_SPLIT:-test}"
 MODEL="${MODEL:-ot}"
-METHOD="${METHOD:-pnp_flow_admm}"
+METHOD="${METHOD:-pnp_cf}"
 
 # Space-separated lists may be overridden from the shell.
 read -r -a datasets <<< "${DATASETS:-afhq_cat celeba}"    # afhq_cat

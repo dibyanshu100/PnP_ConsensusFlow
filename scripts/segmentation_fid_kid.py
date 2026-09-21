@@ -1,11 +1,3 @@
-"""Compute FID, KID, and LPIPS for the segmentation task's reconstructions.
-Usage:
-    python scripts/compute_segmentation_fid_kid.py \
-  --recon_dir results/celebahq/ot/segmentation/pnp_flow_admm/test/<your_config>/fid_kid_images/recon \
-  --real_data_dir data/celebahq/test \
-  --real_ids_file data/celebahq/splits/test_ids.txt
-"""
-
 import argparse
 import os
 import sys
@@ -20,9 +12,6 @@ from pnpflow.fid_score import evaluate_fid_kid
 
 
 def load_images_as_array(image_dir, dim_image, ids_file=None, max_images=None):
-    """Loads every image in `image_dir` (optionally filtered to the ids
-    listed in `ids_file`, one id per line, matched against the filename
-    stem) as a (N, H, W, C) float32 numpy array in [0, 1]."""
     all_files = sorted(os.listdir(image_dir))
 
     if ids_file is not None:
@@ -54,14 +43,6 @@ def load_images_as_array(image_dir, dim_image, ids_file=None, max_images=None):
 
 def compute_paired_lpips(recon_dir, real_dir, dim_image, net='alex',
                           batch_size=50):
-    """Full-reference LPIPS between each reconstruction and its paired
-    ground-truth image, matched by filename (both dirs are written by
-    utils.save_recon_for_fid with identical, index-aligned filenames).
-
-    Returns:
-    -- lpips_mean, lpips_std : Mean and standard deviation of the
-       per-image LPIPS distance.
-    """
     import lpips
 
     recon_files = sorted(os.listdir(recon_dir))

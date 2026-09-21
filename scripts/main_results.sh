@@ -13,7 +13,7 @@ problems=(
 
 methods_batch=(
   pnp_flow_fbs
-  pnp_flow_admm
+  pnp_cf
   ot_ode
   flow_priors
   d_flow
@@ -30,7 +30,7 @@ for dataset in "${datasets[@]}"; do
 
       extra_args=()
 
-      if [[ "$method" == "pnp_flow_admm" ]]; then
+      if [[ "$method" == "pnp_cf" ]]; then
         if [[ "$dataset" == "celeba" ]]; then
           extra_args+=(steps_pnp 200 rho_admm 1000)
         elif [[ "$dataset" == "afhq_cat" ]]; then

@@ -99,7 +99,7 @@ This project supports the following inverse problems:
 
 To run a specific method, you must pass its name using the `method` argument.
 
-* `pnp_flow_admm` — **Proposed method**
+* `pnp_cf` — **Proposed method**
 * `pnp_flow_fbs`
 * `ot_ode`
 * `d_flow`
@@ -115,7 +115,7 @@ python main.py --opts \
     train False \
     eval True \
     problem inpainting \
-    method pnp_flow_admm
+    method pnp_cf
 ```
 
 ---
@@ -130,7 +130,7 @@ Replace `problem` and `method` with the desired options from the lists above.
 
 ## Hyperparameters (PnP-ADMM)
 
-The key hyperparameters for the `pnp_flow_admm` method are:
+The key hyperparameters for the `pnp_cf` method are:
 
 * `steps_pnp` — Number of ADMM iterations (AFHQ-Cat: 250 and CelebA: 200)
 * `rho_admm` — ADMM penalty parameter controlling data–prior balance (AFHQ-Cat: 500 and CelebA: 1000)
@@ -196,7 +196,7 @@ Ensure that the evaluation scripts have been run beforehand so that results are 
 
 ### Appendix Results
 
-Appendix results can be reproduced using `scripts/ablation_results.sh`, with additional variants such as early-stopping ADMM and Tikhonov denoising available by using `pnpflow/methods/pnp_flow_admm_early_stop.py` and `pnpflow/methods/pnp_denoising_tikhonov.py` in place of the main method.
+Appendix results can be reproduced using `scripts/ablation_results.sh`.
 
 ---
 

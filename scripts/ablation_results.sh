@@ -11,7 +11,7 @@ problems=(
   paintbrush_inpainting
 )
 
-methods=("pnp_flow_fbs" "pnp_flow_admm")
+methods=("pnp_flow_fbs" "pnp_cf")
 adaptive_options=(False True)
 deterministic_options=(True False)
 
@@ -26,7 +26,7 @@ for dataset in "${datasets[@]}"; do
 
       # set ADMM-specific hyperparameters
       extra_args=()
-      if [[ "$method" == "pnp_flow_admm" ]]; then
+      if [[ "$method" == "pnp_cf" ]]; then
         if [[ "$dataset" == "celeba" ]]; then
           extra_args+=(steps_pnp 200 rho_admm 1000)
         elif [[ "$dataset" == "afhq_cat" ]]; then
@@ -39,7 +39,7 @@ for dataset in "${datasets[@]}"; do
 
       for adaptive in "${adaptive_options[@]}"; do
 
-        if [[ "$method" == "pnp_flow_admm" && "$adaptive" == "False" ]]; then
+        if [[ "$method" == "pnp_cf" && "$adaptive" == "False" ]]; then
           for deterministic in "${deterministic_options[@]}"; do
 
             python main.py --opts \

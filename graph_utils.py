@@ -29,7 +29,7 @@ def plot_rho_analysis(
     metric_config,
     save_name="all_datasets_metrics_vs_rho_admm.png"
 ):
-    COMMON_SUBPATH = Path("pnp_flow_admm/test")
+    COMMON_SUBPATH = Path("pnp_cf/test")
     METHOD_LABELS = {
     "denoising": "Denoising",
     "gaussian_deblurring_FFT": "Deblurring",
@@ -292,7 +292,7 @@ def extract_basic_metrics(root_dir: Path, out_xlsx: str = "metrics_summary.xlsx"
         if df.empty:
             continue
 
-        if method == "pnp_flow_admm":
+        if method == "pnp_cf":
             for _, r in df.iterrows():
                 adaptive = to_bool(r.get("adaptive_noise", False))
                 deterministic = to_bool(r.get("deterministic_noise", False))
@@ -779,7 +779,7 @@ def extract_time_memory_summary(root_dir: Path) -> pd.DataFrame:
 
         task, method, model = rel[0], rel[1], rel[2]
 
-        if method == "pnp_flow_admm":
+        if method == "pnp_cf":
             path = str(exp_dir).lower()
             if "adaptive_noise=true" in path:
                 method = "ADMM adaptive"
@@ -849,7 +849,7 @@ def plot_fbs_vs_admm_psnr_vs_steps(
 
     `metric` is one of "psnr", "ssim", "lpips" and determines which
     final_<metric>.txt file is read from base_dir/<task>/pnp_flow_fbs/test
-    and base_dir/<task>/pnp_flow_admm/test.
+    and base_dir/<task>/pnp_cf/test.
     """
     if metric not in METRIC_INFO:
         raise ValueError(f"Unknown metric '{metric}'. Choose from {list(METRIC_INFO)}.")
@@ -889,7 +889,7 @@ def plot_fbs_vs_admm_psnr_vs_steps(
         task_dir = base_dir / task
 
         fbs_df = _read_psnr_vs_steps(task_dir / "pnp_flow_fbs" / "test" / metric_filename, y_col)
-        admm_df = _read_psnr_vs_steps(task_dir / "pnp_flow_admm" / "test" / metric_filename, y_col)
+        admm_df = _read_psnr_vs_steps(task_dir / "pnp_cf" / "test" / metric_filename, y_col)
 
         if fbs_df is not None and "adaptive_noise" in fbs_df.columns:
             for adaptive_value, label in [(True, "PnP-FBS (adaptive)"), (False, "PnP-FBS (non-adaptive)")]:
