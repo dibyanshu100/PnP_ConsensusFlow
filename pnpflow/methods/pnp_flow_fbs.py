@@ -36,9 +36,6 @@ class PNP_FLOW_FBS(object):
         return gamma_styles.get(self.args.gamma_style, lambda lr, t: lr)(lr, t)
 
     def grad_datafit(self, x, y, degradation):
-        # Uses degradation.vjp instead of a literal adjoint so this works
-        # unchanged for both linear H (vjp == H_adj(v), exact and cheap) and
-        # nonlinear H (vjp computed via autograd).
         H = degradation.H
         if getattr(degradation, 'is_segmentation', False):
             # Cross-entropy data term instead of squared error for segmentation
@@ -89,8 +86,6 @@ class PNP_FLOW_FBS(object):
             print(clean_img.shape)
 
             if getattr(degradation, 'is_segmentation', False):
-                # Segmentation's measurement is the frozen segmentator's own
-                # prediction on the clean image (argmax class map)
                 with torch.no_grad():
                     noisy_img = H(clean_img.clone().to(self.device)).argmax(dim=1)
             elif self.args.noise_type == 'gaussian':
@@ -122,9 +117,6 @@ class PNP_FLOW_FBS(object):
 
             for restart in range(num_restarts):
                 if num_restarts > 1:
-                    # Only reseed in multi-restart mode: keeps the
-                    # num_restarts=1 path's RNG sequence identical to before
-                    # this feature existed.
                     torch.manual_seed(1000 * batch + restart)
                     print(f"  [restart {restart}/{num_restarts}]")
 

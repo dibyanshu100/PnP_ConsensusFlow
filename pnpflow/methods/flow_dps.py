@@ -119,12 +119,10 @@ class FLOW_DPS(object):
                         data_est = x + (1 - t_) * v      # x_hat_0|tau in the paper's notation
                         noise_est = x - t_ * v            # x_hat_1|tau in the paper's notation
 
-                    # --- 1. Likelihood (data-consistency) gradient step ---
                     data_est_y = self.data_consistency_step(data_est, noisy_img, degradation)
                     gamma = (1 - t_)  # gamma(t) = 1 - t, see class docstring
                     data_tilde = gamma * data_est_y + (1 - gamma) * data_est
 
-                    # --- 2. Stochasticity ---
                     if self.args.use_stochastic_noise:
                         eta = t_next_t.view(-1, 1, 1, 1)
                         eps = torch.randn_like(noise_est)
@@ -133,7 +131,6 @@ class FLOW_DPS(object):
                     else:
                         noise_tilde = noise_est
 
-                    # --- 3. Euler / DDIM-style update ---
                     t_next_ = t_next_t.view(-1, 1, 1, 1)
                     with torch.no_grad():
                         x = t_next_ * data_tilde + (1 - t_next_) * noise_tilde
