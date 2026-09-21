@@ -202,8 +202,37 @@ elif [ "$FILE" == "celebahq-dataset" ]; then
     echo "To use train/test splits, place train_ids.txt/test_ids.txt at"
     echo "$DEST_DIR/splits/ and pass their paths via --opts"
     echo "celebahq_train_ids <path> celebahq_test_ids <path>"
+
+elif [ "$FILE" == "pretrained-network-celebahq" ]; then
+    OUTPUT_DIR=./model/celeba_hq
+    FOLDER_ID=1dgD0MOGwXqCqhx3QA_EcpZbh2YlC3eAC
+
+    mkdir -p "$OUTPUT_DIR"
+
+    echo "Downloading CelebA-HQ models from Google Drive..."
+
+    gdown --folder "$FOLDER_ID" -O "$OUTPUT_DIR"
+
+    echo "Done!"
+    echo "CelebA-HQ models stored in: $OUTPUT_DIR"
+
+elif [ "$FILE" == "deblur_model" ]; then
+    OUTPUT_DIR=./model/deblur_model
+    FOLDER_ID=1j5Q1nyFDuasD9h1_xICRYjtVvqMT-rM2
+
+    mkdir -p "$OUTPUT_DIR"
+
+    echo "Downloading nonlinear_deblur model from Google Drive..."
+
+    if ! gdown --folder "$FOLDER_ID" -O "$OUTPUT_DIR"; then
+        echo "Error: Failed to download deblur model."
+        exit 1
+    fi
+
+    echo "Done!"
+    echo "Deblur model stored in: $OUTPUT_DIR"
  
 else
-    echo "Available arguments are pretrained-network-celeba, pretrained-network-afhq-cat, celeba-dataset, afhq-cat-dataset and celebahq-dataset."
+    echo "Available arguments are pretrained-network-celeba, pretrained-network-afhq-cat, pretrained-network-celebahq, deblur_model, celeba-dataset, afhq-cat-dataset and celebahq-dataset."
     exit 1
 fi

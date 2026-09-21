@@ -211,7 +211,7 @@ def main():
                     'Nonlinear deblurring currently only supports gaussian noise')
             degradation = NonlinearBlur(
                 num_channels=args.num_channels, dim_image=args.dim_image,
-                checkpoint_path=getattr(args, 'nonlinear_blur_checkpoint', 'model/motion_deblur/GOPRO_wVAE.pth'),
+                checkpoint_path=getattr(args, 'nonlinear_blur_checkpoint', 'model/deblur_model/GOPRO_wVAE.pth'),
                 device=device)
 
         elif args.problem == "phase_retrieval":
