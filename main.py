@@ -281,7 +281,7 @@ def main():
         data_loaders = DataLoaders(
             args.dataset, args.batch_size_ip, args.batch_size_ip,
             celebahq_train_ids=getattr(args, 'celebahq_train_ids', None),
-            celebahq_test_ids=getattr(args, 'celebahq_test_ids', 'data/celebahq/splits/test_ids.txt'),
+            celebahq_test_ids=getattr(args, 'celebahq_test_ids', 'pnpflow/nonlinear_ops/segmentation_task/splits/test_ids.txt'),
             dim_image=getattr(args, 'dim_image', None)).load_data()
         if args.noise_type == 'laplace':
             args.save_path = os.path.join(
