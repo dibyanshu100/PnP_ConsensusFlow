@@ -139,33 +139,6 @@ python main.py --opts \
     method pnp_cf
 ```
 
-Run a nonlinear inverse problem:
-
-```bash
-python main.py --opts \
-    dataset celeba \
-    model ot \
-    train False \
-    eval True \
-    eval_split test \
-    problem phase_retrieval \
-    method pnp_cf
-```
-
-Run segmentation-guided reconstruction:
-
-```bash
-python main.py --opts \
-    dataset celebahq \
-    dim_image 128 \
-    model ot \
-    train False \
-    eval True \
-    eval_split test \
-    problem segmentation \
-    method pnp_cf
-```
-
 You can replace `dataset`, `problem`, and `method` with the desired options listed above.
 
 ---
@@ -182,11 +155,11 @@ The main PnP-CF hyperparameters are:
 * `admm_gd_steps` — number of inner gradient-based forward-consistency steps for nonlinear operators
 
 The paper uses task-specific values for these parameters and the optimal values are given in the appendix of paper. 
-The script files `run_all.sh` and `run_seg.sh` also contain the settings used for the reported evaluations.
+The script files `run_all.sh` and `run_seg.sh` contain the settings used for the reported evaluations.
 
 ### Pullback Settings
 
-* `adaptive_noise=True` — **time-adaptive stochastic–deterministic pullback (PnP-CF)**
+* `adaptive_noise=True` — **time-adaptive stochastic–deterministic pullback**
 * `adaptive_noise=False`, `deterministic_noise=True` — deterministic-only pullback
 * `adaptive_noise=False`, `deterministic_noise=False` — stochastic-only pullback
 
@@ -197,8 +170,6 @@ The stochastic-only and deterministic-only variants are used for the ablation ex
 ## Evaluation
 
 The main experiments evaluate **100 test images** from CelebA (`128×128`) and AFHQ-Cat (`256×256`). For image reconstruction we report **PSNR**, **SSIM**, and **LPIPS**. Segmentation-guided reconstruction additionally evaluates consistency with the target mask using **mIoU**.
-
-Measurement noise in the main benchmark is Gaussian. The paper uses `σ=0.05` for box inpainting, super-resolution, nonlinear deblurring, and HDR reconstruction, and `σ=0.01` for random inpainting and phase retrieval. Segmentation-guided reconstruction instead uses a cross-entropy forward-consistency objective with a softened semantic target.
 
 Results are saved under:
 
@@ -235,17 +206,9 @@ bash scripts/run_seg.sh
 
 ---
 
-### Visualization and Analysis
+### Experiment results and Analysis
 
-We provide the Jupyter notebook `graphs.ipynb` for visualizing reconstructions, plotting optimization behavior, and summarizing quantitative results.
-
-The notebook can be used to:
-
-* Plot reconstruction results
-* Compare methods across datasets and inverse problems
-* Visualize PnP-CF residuals and iteration-wise behavior
-* Generate tables for quantitative evaluation
-
+We provide the Jupyter notebook `graphs.ipynb` for plotting optimization behavior, and summarizing quantitative results.
 Ensure that the evaluation scripts have been run beforehand so that the corresponding results are available in the `results/` directory.
 
 ---

@@ -3,7 +3,7 @@ set -euo pipefail
 
 DATASET_ARGS="dataset celebahq dim_image 128 problem segmentation model ot \
 train False eval True eval_split test noise_type gaussian \
-batch_size_ip 4 max_batch 5 start_batch 0 save_results True"
+batch_size_ip 4 max_batch 25 start_batch 0 save_results True"
 
 
 run_method () {
