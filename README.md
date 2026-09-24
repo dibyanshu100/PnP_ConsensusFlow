@@ -4,8 +4,6 @@
 
 This repository contains the implementation of **PnP-CF (Consensus Flow)**, a flow-matching Plug-and-Play solver for general inverse problems. PnP-CF combines an ADMM-like variable-splitting scheme with dual-variable updates and a time-adaptive stochastic–deterministic pullback that repeatedly realigns the iterate with the learned flow trajectory.
 
-The method is designed to decouple forward-consistency optimization from the flow prior, which allows the same framework to handle standard linear inverse problems, differentiable nonlinear operators, and highly non-injective neural-network forward models such as semantic segmentation.
-
 Our implementation is adapted from the PnP-Flow (ICLR 2025) codebase, which is based on a Forward-Backward Splitting (FBS) formulation.
 
 ---
@@ -20,20 +18,6 @@ Inverse problems aim to recover an unknown signal from degraded or incomplete me
 * **Time-adaptive trajectory pullback:** the pullback combines a stochastic component for exploration with a trajectory-dependent deterministic component for refinement, gradually shifting from stochastic exploration to trajectory-consistent updates.
 * **General forward operators:** linear problems use conjugate gradients for the forward-consistency subproblem, while differentiable nonlinear operators are handled with gradient-based updates without backpropagating through the flow denoiser.
 * **Neural-network forward models:** the framework also supports segmentation-guided reconstruction using a pretrained segmentation network as a highly non-injective forward operator.
-
-For the flow model, the one-step denoising operator is
-
-```math
-D_t(x_t) = x_t + (1-t)v_\theta(x_t,t).
-```
-
-The adaptive latent used in the pullback combines deterministic and stochastic components as
-
-```math
-\epsilon_k = \frac{t_k\epsilon_k^{d} + (1-t_k)\epsilon_k^{s}}
-{\sqrt{t_k^2 + (1-t_k)^2}},
-\qquad \epsilon_k^{s}\sim\mathcal{N}(0,I).
-```
 
 <p align="center">
   <img src="all_comparisons_paper.png" width="950"/>
