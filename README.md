@@ -135,8 +135,6 @@ python main.py --opts \
     method pnp_cf
 ```
 
-You can replace `dataset`, `problem`, and `method` with the desired options listed above.
-
 ---
 
 ## Hyperparameters (PnP-CF)
