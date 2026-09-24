@@ -182,13 +182,7 @@ The repository contains scripts for the paper experiments and ablations.
 Full linear/nonlinear benchmark and method comparisons:
 
 ```bash
-MAX_BATCH=25 BATCH_SIZE_IP=4 bash scripts/run_all.sh
-```
-
-Schedule-free PnP-CF experiments:
-
-```bash
-bash scripts/run_default_params.sh
+bash scripts/run_all.sh
 ```
 
 Segmentation-guided reconstruction:
@@ -234,7 +228,6 @@ See the `LICENSE` file for details.
 This repository builds upon the following works:
 
 * PnP-Flow (ICLR 2025)
-* GSPnP
 * DeepInv
 * Rectified Flow
 
