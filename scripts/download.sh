@@ -199,9 +199,6 @@ elif [ "$FILE" == "celebahq-dataset" ]; then
     echo "Images stored in: $IMG_DIR"
     echo "Mask annotations stored in: $MASK_DIR (if found -- see above)"
     echo ""
-    echo "To use train/test splits, place train_ids.txt/test_ids.txt at"
-    echo "$DEST_DIR/splits/ and pass their paths via --opts"
-    echo "celebahq_train_ids <path> celebahq_test_ids <path>"
 
 elif [ "$FILE" == "pretrained-network-celebahq" ]; then
     OUTPUT_DIR=./model/celeba_hq

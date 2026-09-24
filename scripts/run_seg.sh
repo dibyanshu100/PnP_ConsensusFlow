@@ -58,7 +58,7 @@ run_method () {
     if ! python scripts/segmentation_fid_kid.py \
         --recon_dir "${recon_dir}" \
         --real_data_dir data/celebahq/test \
-        --real_ids_file data/celebahq/splits/test_ids.txt \
+        --real_ids_file pnpflow/nonlinear_ops/segmentation_task/splits/test_ids.txt \
         --subset_size 50; then
 
         echo "ERROR: FID/KID/LPIPS computation failed for ${method}" >&2
@@ -88,7 +88,7 @@ safe_run () {
 }
 
 
-# ---- pnp_cf ----------------------------------------------------
+# pnp_cf
 
 safe_run pnp_cf \
     steps_pnp 500 \
@@ -102,18 +102,18 @@ safe_run pnp_cf \
     deterministic_noise False
 
 
-# ---- pnp_flow_fbs -----------------------------------------------------
+# pnp_flow_fbs
 
 safe_run pnp_flow_fbs \
     steps_pnp 500
 
 
-# ---- d_flow -----------------------------------------------------------
+# d_flow
 
 safe_run d_flow
 
 
-# ---- flow_dps ---------------------------------------------------------
+# flow_dps
 
 safe_run flow_dps
 
