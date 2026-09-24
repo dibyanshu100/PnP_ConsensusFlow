@@ -126,8 +126,6 @@ For nonlinear forward operators, the implementation supports `pnp_cf`, `pnp_flow
 
 ### Example Run
 
-Run PnP-CF on CelebA box inpainting:
-
 ```bash
 python main.py --opts \
     dataset celeba \
