@@ -33,8 +33,6 @@ Clone the repository and install the required dependencies:
 pip install -r requirements.txt
 ```
 
-This will install all the necessary Python packages required to run the project.
-
 
 ---
 
