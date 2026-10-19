@@ -230,6 +230,7 @@ See the `LICENSE` file for details.
 This repository builds upon the following works:
 
 * PnP-Flow (ICLR 2025)
+* PnP-Flow-ADMM (NeurIPS 2026)
 * GSPnP
 * DeepInv
 * Rectified Flow
