@@ -2,7 +2,9 @@
 
 # PnP-CF: A Consensus Flow-Matching Solver for General Inverse Problems
 
-This repository contains the implementation of **PnP-CF (Consensus Flow)**, a flow-matching Plug-and-Play solver for general inverse problems. PnP-CF combines an ADMM-like variable-splitting scheme with dual-variable updates and a time-adaptive stochastic–deterministic pullback that repeatedly realigns the iterate with the learned flow trajectory.
+<!-- This repository contains the implementation of **PnP-CF (Consensus Flow)**, a flow-matching Plug-and-Play solver for general inverse problems. PnP-CF combines an ADMM-like variable-splitting scheme with dual-variable updates and a time-adaptive stochastic–deterministic pullback that repeatedly realigns the iterate with the learned flow trajectory. -->
+
+This repository contains the implementation of **PnP-CF (Plug-and-Play Consensus Flow)**, accompanying the paper *PnP-CF: A Consensus Flow-Matching Solver for General Inverse Problems*. PnP-CF builds on the flow-based PnP-ADMM framework introduced in [Kumar & Gregorová, NeurIPS 2026] and extends it to nonlinear inverse problems, including learned neural-network forward operators such as segmentation networks.
 
 Our implementation is adapted from the PnP-Flow (ICLR 2025) codebase, which is based on a Forward-Backward Splitting (FBS) formulation.
 
